@@ -6,6 +6,25 @@ function parseMultiValue(value: string | null): readonly string[] {
   return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
 }
 
+/**
+ * Download Location에서 purl(Package URL)을 생성한다.
+ * GitHub URL → pkg:github/owner/repo
+ * 그 외 → 빈 문자열 (purl 생성 불가)
+ */
+export function buildPurl(downloadLocation: string): string {
+  const trimmed = downloadLocation.trim()
+  if (!trimmed) return ''
+
+  const githubMatch = trimmed.match(/github\.com\/([^/]+)\/([^/#?]+)/i)
+  if (githubMatch) {
+    const owner = githubMatch[1].toLowerCase()
+    const repo = githubMatch[2].replace(/\.git$/, '').toLowerCase()
+    return `pkg:github/${owner}/${repo}`
+  }
+
+  return ''
+}
+
 export function toOssCreateRequest(
   row: OssRow,
 ): Omit<OsoriOssCreateRequest, 'reviewed'> {

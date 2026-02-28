@@ -94,6 +94,7 @@ export async function fetchOssList(
   page: number = 0,
   size: number = 10,
   exactMatch: boolean = true,
+  purl?: string,
 ): Promise<ApiResponse<readonly OsoriOss[]>> {
   const params = new URLSearchParams({
     downloadLocation,
@@ -101,6 +102,9 @@ export async function fetchOssList(
     size: String(size),
     exactMatch: String(exactMatch),
   })
+  if (purl) {
+    params.set('purl', purl)
+  }
   return apiFetch<readonly OsoriOss[]>(`/api/osori/oss?${params}`, token)
 }
 

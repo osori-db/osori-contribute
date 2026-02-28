@@ -120,13 +120,17 @@ export async function searchOss(
   page: number = 0,
   size: number = 10,
   exactMatch: boolean = true,
+  purl?: string,
 ): Promise<OsoriApiResult<readonly OsoriOss[]>> {
   const query = makeListQuery({ page, size, sort: 'oss_master_id', exactMatch })
   const dlParam = downloadLocation.trim()
     ? `&downloadLocation=${encodeURIComponent(downloadLocation.trim())}`
     : ''
+  const purlParam = purl?.trim()
+    ? `&purl=${encodeURIComponent(purl.trim())}`
+    : ''
   const response = await externalFetch(
-    `${API_PREFIX}/oss${query}${dlParam}`,
+    `${API_PREFIX}/oss${query}${dlParam}${purlParam}`,
     token,
   )
   return extractListData<OsoriOss>(response)

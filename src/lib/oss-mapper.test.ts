@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toOssCreateRequest, toOssVersionCreateRequest } from './oss-mapper'
+import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from './oss-mapper'
 import type { OssRow } from './types'
 
 function makeOssRow(overrides: Partial<OssRow> = {}): OssRow {
@@ -25,6 +25,34 @@ function makeOssRow(overrides: Partial<OssRow> = {}): OssRow {
     ...overrides,
   }
 }
+
+describe('buildPurl', () => {
+  it('GitHub URL에서 purl을 생성한다', () => {
+    expect(buildPurl('https://github.com/lodash/lodash')).toBe('pkg:github/lodash/lodash')
+  })
+
+  it('GitHub URL의 .git 접미사를 제거한다', () => {
+    expect(buildPurl('https://github.com/facebook/react.git')).toBe('pkg:github/facebook/react')
+  })
+
+  it('GitHub URL을 소문자로 변환한다', () => {
+    expect(buildPurl('https://github.com/Facebook/React')).toBe('pkg:github/facebook/react')
+  })
+
+  it('GitHub URL에 경로 추가가 있어도 올바르게 파싱한다', () => {
+    expect(buildPurl('https://github.com/owner/repo#readme')).toBe('pkg:github/owner/repo')
+    expect(buildPurl('https://github.com/owner/repo?tab=readme')).toBe('pkg:github/owner/repo')
+  })
+
+  it('GitHub가 아닌 URL이면 빈 문자열을 반환한다', () => {
+    expect(buildPurl('https://npmjs.com/package/lodash')).toBe('')
+  })
+
+  it('빈 문자열이면 빈 문자열을 반환한다', () => {
+    expect(buildPurl('')).toBe('')
+    expect(buildPurl('   ')).toBe('')
+  })
+})
 
 describe('toOssCreateRequest', () => {
   it('기본 필드를 올바르게 매핑한다', () => {

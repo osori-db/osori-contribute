@@ -20,8 +20,9 @@ export async function GET(request: NextRequest) {
     const page = Number(searchParams.get('page') ?? '0')
     const size = Number(searchParams.get('size') ?? '10')
     const exactMatch = searchParams.get('exactMatch') !== 'false'
+    const purl = searchParams.get('purl') ?? undefined
 
-    const result = await searchOss(token, downloadLocation, page, size, exactMatch)
+    const result = await searchOss(token, downloadLocation, page, size, exactMatch, purl)
     return NextResponse.json(result)
   } catch (error) {
     return NextResponse.json(

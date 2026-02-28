@@ -3,8 +3,8 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLicenseMapping } from '@/hooks/useLicenseMapping'
-import { fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
-import { toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
+import { fetchOssList, fetchOssVersions, fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
+import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
 import ContributeButton from './ContributeButton'
 import OssContributeModal from './OssContributeModal'
 import Pagination from './Pagination'
@@ -41,6 +41,7 @@ export default function OssList({ rows }: OssListProps) {
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
   const [selectedRow, setSelectedRow] = useState<{ row: OssRow; index: number } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
 
   const selectedRowLicenseNames = useMemo(() => {
@@ -68,6 +69,7 @@ export default function OssList({ rows }: OssListProps) {
 
   const handleCloseModal = useCallback(() => {
     setSelectedRow(null)
+    setSaveError(null)
   }, [])
 
   const handleSave = useCallback(async () => {
@@ -75,40 +77,67 @@ export default function OssList({ rows }: OssListProps) {
 
     const { row, index } = selectedRow
     setSaving(true)
+    setSaveError(null)
     setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
 
     try {
-      // 1. Create OSS master
-      const ossRequest = toOssCreateRequest(row)
-      const ossResult = await fetchCreateOss(token, ossRequest)
-      if (!ossResult.success || !ossResult.data) {
-        throw new Error('OSS 생성에 실패했습니다.')
-      }
-      const ossMasterId = ossResult.data.oss_master_id
+      let ossMasterId: number | null = null
 
-      // 2. Create OSS Version (if version exists)
-      if (row.version?.trim()) {
-        const declaredNames = parseMultiValue(row.declaredLicenseList)
-        const detectedNames = parseMultiValue(row.detectedLicenseList)
-        const declaredIds = mapLicenseNamesToIds(declaredNames)
-        const detectedIds = mapLicenseNamesToIds(detectedNames)
-
-        const versionRequest = toOssVersionCreateRequest(row, ossMasterId, declaredIds, detectedIds)
-        const versionResult = await fetchCreateOssVersion(token, versionRequest)
-        if (!versionResult.success) {
-          throw new Error('OSS Version 생성에 실패했습니다.')
+      // 1. purl로 기존 OSS 조회
+      const purl = buildPurl(row.downloadLocation)
+      if (purl) {
+        const searchResult = await fetchOssList(token, '', 0, 1, true, purl)
+        if (searchResult.success && searchResult.data && searchResult.data.length > 0) {
+          ossMasterId = searchResult.data[0].oss_master_id
         }
       }
 
-      setStatuses((prev) => ({
-        ...prev,
-        [index]: 'success',
-      }))
-    } catch {
-      setStatuses((prev) => ({ ...prev, [index]: 'error' }))
-    } finally {
+      // 2. OSS가 없으면 생성
+      if (ossMasterId === null) {
+        const ossRequest = toOssCreateRequest(row)
+        const ossResult = await fetchCreateOss(token, ossRequest)
+        if (!ossResult.success || !ossResult.data) {
+          const errMsg = ossResult.error ?? 'OSS 생성에 실패했습니다.'
+          setSaveError(errMsg)
+          setStatuses((prev) => ({ ...prev, [index]: 'error' }))
+          setSaving(false)
+          return
+        }
+        ossMasterId = ossResult.data.oss_master_id
+      }
+
+      // 3. 버전이 있으면 기존 버전 조회 → 없으면 생성
+      if (row.version?.trim()) {
+        // 기존 버전 조회
+        const versionsResult = await fetchOssVersions(token, ossMasterId)
+        const versionExists = versionsResult.success
+          && versionsResult.data?.some((v) => v.version === row.version?.trim())
+
+        if (!versionExists) {
+          const declaredNames = parseMultiValue(row.declaredLicenseList)
+          const detectedNames = parseMultiValue(row.detectedLicenseList)
+          const declaredIds = mapLicenseNamesToIds(declaredNames)
+          const detectedIds = mapLicenseNamesToIds(detectedNames)
+
+          const versionRequest = toOssVersionCreateRequest(row, ossMasterId, declaredIds, detectedIds)
+          const versionResult = await fetchCreateOssVersion(token, versionRequest)
+          if (!versionResult.success) {
+            const errMsg = versionResult.error ?? 'OSS Version 생성에 실패했습니다.'
+            setSaveError(errMsg)
+            setStatuses((prev) => ({ ...prev, [index]: 'error' }))
+            setSaving(false)
+            return
+          }
+        }
+      }
+
+      setStatuses((prev) => ({ ...prev, [index]: 'success' }))
       setSaving(false)
       setSelectedRow(null)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
+      setStatuses((prev) => ({ ...prev, [index]: 'error' }))
+      setSaving(false)
     }
   }, [token, selectedRow, mapLicenseNamesToIds])
 
@@ -217,6 +246,7 @@ export default function OssList({ rows }: OssListProps) {
           row={selectedRow.row}
           onSave={handleSave}
           saving={saving}
+          saveError={saveError}
           licenseMap={licenseMap}
           licenseMappingLoading={licenseMappingLoading}
         />

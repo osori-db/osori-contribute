@@ -12,6 +12,7 @@ interface OssContributeModalProps {
   readonly row: OssRow
   readonly onSave: () => void
   readonly saving: boolean
+  readonly saveError?: string | null
   readonly licenseMap: ReadonlyMap<string, number | null>
   readonly licenseMappingLoading: boolean
 }
@@ -74,6 +75,7 @@ export default function OssContributeModal({
   row,
   onSave,
   saving,
+  saveError,
   licenseMap,
   licenseMappingLoading,
 }: OssContributeModalProps) {
@@ -207,6 +209,12 @@ export default function OssContributeModal({
           <div>
             <label className={FIELD_LABEL}>Description</label>
             <p className={FIELD_VALUE}>{row.descriptionKo}</p>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
+            {saveError}
           </div>
         )}
 
