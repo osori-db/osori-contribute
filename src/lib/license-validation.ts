@@ -36,10 +36,6 @@ export function validateLicenseRow(row: LicenseRow): FieldHints {
     addHint(hints, 'obligationDisclosingSrc', 'info', '소스 코드 공개 범위와 근거 조항을 확인해주세요.')
   }
 
-  // 7. Restriction 근거 조항
-  if (row.restriction?.trim()) {
-    addHint(hints, 'restriction', 'info', 'Restriction에 대한 근거 조항을 확인해주세요.')
-  }
 
   return hints
 }
