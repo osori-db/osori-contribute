@@ -3,7 +3,6 @@
 import { useState, useCallback } from 'react'
 import { parseLicenseExcel } from '@/lib/license-parser'
 import { isValidExcelFile } from '@/lib/excel-parser'
-import { LICENSE_SAMPLE_DATA } from '@/lib/license-sample-data'
 import type { LicenseData } from '@/lib/types'
 
 interface UseLicenseDataReturn {
@@ -12,20 +11,17 @@ interface UseLicenseDataReturn {
   readonly error: string | null
   readonly handleFile: (file: File) => Promise<void>
   readonly clearData: () => void
-  readonly isUsingSample: boolean
 }
 
-const SAMPLE_LICENSE_DATA: LicenseData = {
-  rows: LICENSE_SAMPLE_DATA,
+const EMPTY_LICENSE_DATA: LicenseData = {
+  rows: [],
   fileName: '',
 }
 
 export function useLicenseData(): UseLicenseDataReturn {
-  const [licenseData, setLicenseData] = useState<LicenseData>(SAMPLE_LICENSE_DATA)
+  const [licenseData, setLicenseData] = useState<LicenseData>(EMPTY_LICENSE_DATA)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const isUsingSample = licenseData.fileName === ''
 
   const handleFile = useCallback(async (file: File) => {
     if (!isValidExcelFile(file)) {
@@ -47,9 +43,9 @@ export function useLicenseData(): UseLicenseDataReturn {
   }, [])
 
   const clearData = useCallback(() => {
-    setLicenseData(SAMPLE_LICENSE_DATA)
+    setLicenseData(EMPTY_LICENSE_DATA)
     setError(null)
   }, [])
 
-  return { licenseData, loading, error, handleFile, clearData, isUsingSample }
+  return { licenseData, loading, error, handleFile, clearData }
 }

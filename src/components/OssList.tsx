@@ -1,11 +1,14 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { contribute } from '@/lib/api-client'
 import ContributeButton from './ContributeButton'
 import OssContributeModal from './OssContributeModal'
+import Pagination from './Pagination'
 import type { OssRow, ContributeStatus } from '@/lib/types'
+
+const PAGE_SIZE = 20
 
 interface OssListProps {
   readonly rows: readonly OssRow[]
@@ -36,6 +39,16 @@ export default function OssList({ rows }: OssListProps) {
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
   const [selectedRow, setSelectedRow] = useState<{ row: OssRow; index: number } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [rows])
+
+  const pagedRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return rows.slice(start, start + PAGE_SIZE)
+  }, [rows, currentPage])
 
   const handleOpenModal = useCallback((index: number, row: OssRow) => {
     setSelectedRow({ row, index })
@@ -82,9 +95,6 @@ export default function OssList({ rows }: OssListProps) {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-gray-500">
-        총 {rows.length.toLocaleString()}건
-      </p>
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
         <table className="text-left" style={{ width: 1600, minWidth: 1600 }}>
           <colgroup>
@@ -112,11 +122,12 @@ export default function OssList({ rows }: OssListProps) {
             </tr>
           </thead>
           <tbody className="bg-white">
-            {rows.map((row, index) => {
-              const status = statuses[index] ?? 'idle'
+            {pagedRows.map((row, i) => {
+              const globalIndex = (currentPage - 1) * PAGE_SIZE + i
+              const status = statuses[globalIndex] ?? 'idle'
               return (
                 <tr
-                  key={index}
+                  key={globalIndex}
                   className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-3 py-2.5 text-xs text-gray-400 text-center">
@@ -163,7 +174,7 @@ export default function OssList({ rows }: OssListProps) {
                   <td className="px-3 py-2.5 text-center">
                     <ContributeButton
                       status={status}
-                      onClick={() => handleOpenModal(index, row)}
+                      onClick={() => handleOpenModal(globalIndex, row)}
                     />
                   </td>
                 </tr>
@@ -172,6 +183,13 @@ export default function OssList({ rows }: OssListProps) {
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        totalCount={rows.length}
+        currentPage={currentPage}
+        pageSize={PAGE_SIZE}
+        onPageChange={setCurrentPage}
+      />
 
       {selectedRow && (
         <OssContributeModal

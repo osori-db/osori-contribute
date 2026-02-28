@@ -3,7 +3,6 @@
 import { useState, useCallback } from 'react'
 import { parseOssExcel } from '@/lib/oss-parser'
 import { isValidExcelFile } from '@/lib/excel-parser'
-import { OSS_SAMPLE_DATA } from '@/lib/oss-sample-data'
 import type { OssData } from '@/lib/types'
 
 interface UseOssDataReturn {
@@ -12,20 +11,17 @@ interface UseOssDataReturn {
   readonly error: string | null
   readonly handleFile: (file: File) => Promise<void>
   readonly clearData: () => void
-  readonly isUsingSample: boolean
 }
 
-const SAMPLE_OSS_DATA: OssData = {
-  rows: OSS_SAMPLE_DATA,
+const EMPTY_OSS_DATA: OssData = {
+  rows: [],
   fileName: '',
 }
 
 export function useOssData(): UseOssDataReturn {
-  const [ossData, setOssData] = useState<OssData>(SAMPLE_OSS_DATA)
+  const [ossData, setOssData] = useState<OssData>(EMPTY_OSS_DATA)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const isUsingSample = ossData.fileName === ''
 
   const handleFile = useCallback(async (file: File) => {
     if (!isValidExcelFile(file)) {
@@ -47,9 +43,9 @@ export function useOssData(): UseOssDataReturn {
   }, [])
 
   const clearData = useCallback(() => {
-    setOssData(SAMPLE_OSS_DATA)
+    setOssData(EMPTY_OSS_DATA)
     setError(null)
   }, [])
 
-  return { ossData, loading, error, handleFile, clearData, isUsingSample }
+  return { ossData, loading, error, handleFile, clearData }
 }
