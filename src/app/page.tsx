@@ -18,9 +18,9 @@ export default function HomePage() {
   }
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-8">
+    <main className="max-w-7xl mx-auto px-4 py-8">
       <Header />
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
         <div className="p-6">
           {activeTab === 'license' ? <LicenseTab /> : <OssTab />}

@@ -39,8 +39,8 @@ export default function DataList({ data, type }: DataListProps) {
       <p className="text-sm text-gray-500">
         총 {data.rows.length.toLocaleString()}건
       </p>
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full text-left">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
+        <table className="text-left" style={{ minWidth: 900 }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600 text-center w-14">#</th>

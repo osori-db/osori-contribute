@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+.scrollbar-visible {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+.scrollbar-visible::-webkit-scrollbar {
+  height: 8px;
+}
+
+.scrollbar-visible::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-visible::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 4px;
+}
+
+.scrollbar-visible::-webkit-scrollbar-thumb:hover {
+  background-color: #9ca3af;
+}
+
 @theme {
   --color-olive-50: #f0faf5;
   --color-olive-100: #e2f6f0;

@@ -39,3 +39,21 @@ export interface UserInfo {
   readonly companyName: string
   readonly key: string
 }
+
+export interface LicenseRow {
+  readonly no: number
+  readonly licenseName: string
+  readonly spdxIdentifier: string
+  readonly nickName: string | null
+  readonly obligationNotice: boolean
+  readonly obligationDisclosingSrc: string
+  readonly restriction: string | null
+  readonly webpage: string
+  readonly webpageList: string | null
+  readonly descriptionKo: string | null
+}
+
+export interface LicenseData {
+  readonly rows: readonly LicenseRow[]
+  readonly fileName: string
+}
