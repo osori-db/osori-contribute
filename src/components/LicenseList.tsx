@@ -2,7 +2,9 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { contribute } from '@/lib/api-client'
+import { useRestrictions } from '@/hooks/useRestrictions'
+import { fetchCreateLicense } from '@/lib/api-client'
+import { toLicenseCreateRequest } from '@/lib/license-mapper'
 import ContributeButton from './ContributeButton'
 import LicenseContributeModal from './LicenseContributeModal'
 import Pagination from './Pagination'
@@ -80,8 +82,14 @@ function WebpageCell({ webpage, webpageList }: { readonly webpage: string; reado
   )
 }
 
+function parseMultiValue(value: string | null): readonly string[] {
+  if (!value) return []
+  return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
+}
+
 export default function LicenseList({ rows }: LicenseListProps) {
   const { token } = useAuth()
+  const { restrictions, mapNamesToIds } = useRestrictions()
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
   const [selectedRow, setSelectedRow] = useState<{ row: LicenseRow; index: number } | null>(null)
   const [saving, setSaving] = useState(false)
@@ -112,17 +120,10 @@ export default function LicenseList({ rows }: LicenseListProps) {
     setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
 
     try {
-      const result = await contribute(token, 'license', {
-        licenseName: row.licenseName,
-        spdxIdentifier: row.spdxIdentifier,
-        nickName: row.nickName,
-        obligationNotice: row.obligationNotice,
-        obligationDisclosingSrc: row.obligationDisclosingSrc,
-        restriction: row.restriction,
-        webpage: row.webpage,
-        webpageList: row.webpageList,
-        descriptionKo: row.descriptionKo,
-      })
+      const restrictionNames = parseMultiValue(row.restriction)
+      const restrictionIds = mapNamesToIds(restrictionNames)
+      const request = toLicenseCreateRequest(row, restrictionIds)
+      const result = await fetchCreateLicense(token, request)
       setStatuses((prev) => ({
         ...prev,
         [index]: result.success ? 'success' : 'error',
@@ -133,7 +134,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
       setSaving(false)
       setSelectedRow(null)
     }
-  }, [token, selectedRow])
+  }, [token, selectedRow, mapNamesToIds])
 
   return (
     <div className="space-y-3">
@@ -232,6 +233,8 @@ export default function LicenseList({ rows }: LicenseListProps) {
           row={selectedRow.row}
           onSave={handleSave}
           saving={saving}
+          restrictions={restrictions}
+          mapNamesToIds={mapNamesToIds}
         />
       )}
     </div>

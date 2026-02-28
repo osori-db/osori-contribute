@@ -6,6 +6,7 @@ import { validateLicenseRow } from '@/lib/license-validation'
 import { hasValidationFailure } from '@/lib/oss-validation'
 import type { LicenseRow } from '@/lib/types'
 import type { FieldHint, FieldHints } from '@/lib/oss-validation'
+import type { OsoriRestriction } from '@/lib/osori-types'
 
 interface LicenseContributeModalProps {
   readonly open: boolean
@@ -13,6 +14,8 @@ interface LicenseContributeModalProps {
   readonly row: LicenseRow
   readonly onSave: () => void
   readonly saving: boolean
+  readonly restrictions: readonly OsoriRestriction[]
+  readonly mapNamesToIds: (names: readonly string[]) => readonly number[]
 }
 
 const FIELD_LABEL = 'block text-xs font-medium text-gray-500 mb-1'
@@ -56,12 +59,28 @@ export default function LicenseContributeModal({
   row,
   onSave,
   saving,
+  restrictions: osoriRestrictions,
+  mapNamesToIds,
 }: LicenseContributeModalProps) {
-  const restrictions = parseMultiValue(row.restriction)
+  const restrictionNames = parseMultiValue(row.restriction)
   const webpageListUrls = parseMultiValue(row.webpageList)
 
   const hints = useMemo(() => validateLicenseRow(row), [row])
   const hasFail = useMemo(() => hasValidationFailure(hints), [hints])
+
+  const restrictionMapping = useMemo(() => {
+    if (restrictionNames.length === 0) return []
+    const idMap = new Map<string, number>()
+    for (const r of osoriRestrictions) {
+      idMap.set(r.name.toLowerCase().trim(), r.id)
+    }
+    return restrictionNames.map((name) => ({
+      name,
+      id: idMap.get(name.toLowerCase().trim()) ?? null,
+    }))
+  }, [restrictionNames, osoriRestrictions])
+
+  const unmappedRestrictions = restrictionMapping.filter((r) => r.id === null)
 
   return (
     <Modal open={open} onClose={onClose} title="라이선스 기여하기">
@@ -111,19 +130,29 @@ export default function LicenseContributeModal({
 
         <div>
           <label className={FIELD_LABEL}>Restriction</label>
-          {restrictions.length > 0 ? (
+          {restrictionMapping.length > 0 ? (
             <div className="flex flex-wrap gap-1.5 mt-1">
-              {restrictions.map((item, i) => {
-                const color = RESTRICTION_COLORS[item] ?? 'bg-gray-50 text-gray-600 border-gray-200'
+              {restrictionMapping.map((item, i) => {
+                const color = RESTRICTION_COLORS[item.name] ?? 'bg-gray-50 text-gray-600 border-gray-200'
                 return (
-                  <span key={i} className={`inline-block px-2.5 py-1 text-xs font-medium rounded border ${color}`}>
-                    {item}
+                  <span key={i} className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border ${color}`}>
+                    {item.name}
+                    {item.id !== null ? (
+                      <span className="text-[10px] opacity-60">#{item.id}</span>
+                    ) : (
+                      <span className="text-[10px] text-red-500">?</span>
+                    )}
                   </span>
                 )
               })}
             </div>
           ) : (
             <p className="text-sm text-gray-400">-</p>
+          )}
+          {unmappedRestrictions.length > 0 && (
+            <p className="mt-1 text-xs text-amber-600">
+              * 매핑되지 않은 Restriction: {unmappedRestrictions.map((r) => r.name).join(', ')}
+            </p>
           )}
           <FieldHintsView hints={hints} field="restriction" />
         </div>
