@@ -26,7 +26,7 @@ function ObligationBadge({ value }: { readonly value: boolean }) {
   )
 }
 
-function RestrictionBadge({ value }: { readonly value: string | null }) {
+function RestrictionBadges({ value }: { readonly value: string | null }) {
   if (!value) return <span className="text-gray-300">-</span>
 
   const colorMap: Record<string, string> = {
@@ -35,12 +35,44 @@ function RestrictionBadge({ value }: { readonly value: string | null }) {
     'Internal Use Only': 'bg-purple-50 text-purple-700 border-purple-200',
   }
 
-  const color = colorMap[value.trim()] ?? 'bg-gray-50 text-gray-600 border-gray-200'
+  const items = value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
+
+  if (items.length === 0) return <span className="text-gray-300">-</span>
 
   return (
-    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded border ${color}`}>
-      {value.trim()}
-    </span>
+    <div className="flex flex-col gap-1">
+      {items.map((item, i) => {
+        const color = colorMap[item] ?? 'bg-gray-50 text-gray-600 border-gray-200'
+        return (
+          <span key={i} className={`inline-block px-2 py-0.5 text-xs font-medium rounded border ${color}`}>
+            {item}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function WebpageCell({ webpage, webpageList }: { readonly webpage: string; readonly webpageList: string | null }) {
+  if (!webpage && !webpageList) return <span className="text-gray-300">-</span>
+
+  const extraUrls = webpageList
+    ? webpageList.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
+    : []
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {webpage && (
+        <span className="truncate block text-xs text-gray-600" title={webpage}>
+          {webpage}
+        </span>
+      )}
+      {extraUrls.map((url, i) => (
+        <span key={i} className="truncate block text-xs text-gray-400" title={url}>
+          {url}
+        </span>
+      ))}
+    </div>
   )
 }
 
@@ -80,15 +112,16 @@ export default function LicenseList({ rows }: LicenseListProps) {
         총 {rows.length.toLocaleString()}건
       </p>
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
-        <table className="text-left" style={{ width: 1400, minWidth: 1400 }}>
+        <table className="text-left" style={{ width: 1750, minWidth: 1750 }}>
           <colgroup>
             <col style={{ width: 50 }} />
-            <col style={{ width: 360 }} />
             <col style={{ width: 300 }} />
-            <col style={{ width: 80 }} />
-            <col style={{ width: 80 }} />
+            <col style={{ width: 260 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
             <col style={{ width: 180 }} />
-            <col style={{ width: 200 }} />
+            <col style={{ width: 340 }} />
+            <col style={{ width: 280 }} />
             <col style={{ width: 100 }} />
           </colgroup>
           <thead>
@@ -100,6 +133,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600 text-center">Source</th>
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Restriction</th>
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Webpage</th>
+              <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Description</th>
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600 text-center">작업</th>
             </tr>
           </thead>
@@ -136,12 +170,13 @@ export default function LicenseList({ rows }: LicenseListProps) {
                     <span className="text-xs text-gray-500">{row.obligationDisclosingSrc}</span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <RestrictionBadge value={row.restriction} />
+                    <RestrictionBadges value={row.restriction} />
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <WebpageCell webpage={row.webpage} webpageList={row.webpageList} />
                   </td>
                   <td className="px-3 py-2.5 text-xs text-gray-600">
-                    <span className="truncate block" title={row.webpage}>
-                      {row.webpage || '-'}
-                    </span>
+                    {row.descriptionKo || <span className="text-gray-300">-</span>}
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     <ContributeButton
