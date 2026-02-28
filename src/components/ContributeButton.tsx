@@ -5,9 +5,10 @@ import type { ContributeStatus } from '@/lib/types'
 interface ContributeButtonProps {
   readonly status: ContributeStatus
   readonly onClick: () => void
+  readonly disabled?: boolean
 }
 
-export default function ContributeButton({ status, onClick }: ContributeButtonProps) {
+export default function ContributeButton({ status, onClick, disabled = false }: ContributeButtonProps) {
   if (status === 'success') {
     return (
       <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-full">
@@ -24,7 +25,8 @@ export default function ContributeButton({ status, onClick }: ContributeButtonPr
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-full hover:bg-red-100 transition-colors"
+        disabled={disabled}
+        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-full hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -38,7 +40,7 @@ export default function ContributeButton({ status, onClick }: ContributeButtonPr
     <button
       type="button"
       onClick={onClick}
-      disabled={status === 'loading'}
+      disabled={disabled || status === 'loading'}
       className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-olive-500 rounded-full hover:bg-olive-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
     >
       {status === 'loading' ? (

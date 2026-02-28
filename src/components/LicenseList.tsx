@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { Fragment, useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRestrictions } from '@/hooks/useRestrictions'
 import { fetchLicenses, fetchCreateLicense } from '@/lib/api-client'
 import { toLicenseCreateRequest } from '@/lib/license-mapper'
+import { validateLicenseRow } from '@/lib/license-validation'
+import { hasValidationFailure } from '@/lib/oss-validation'
 import ContributeButton from './ContributeButton'
 import LicenseContributeModal from './LicenseContributeModal'
 import Pagination from './Pagination'
@@ -95,6 +97,9 @@ export default function LicenseList({ rows }: LicenseListProps) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [errorMessages, setErrorMessages] = useState<Record<number, string>>({})
+  const [batchSaving, setBatchSaving] = useState(false)
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
 
   useEffect(() => {
     setCurrentPage(1)
@@ -157,8 +162,97 @@ export default function LicenseList({ rows }: LicenseListProps) {
     }
   }, [token, selectedRow, mapNamesToIds])
 
+  const handleBatchContribute = useCallback(async () => {
+    if (!token || batchSaving) return
+
+    setBatchSaving(true)
+    setBatchProgress({ current: 0, total: rows.length })
+    setErrorMessages({})
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      const currentStatus = statuses[i]
+
+      // 이미 성공한 항목은 스킵
+      if (currentStatus === 'success') {
+        setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
+        continue
+      }
+
+      // 검증
+      const hints = validateLicenseRow(row)
+      if (hasValidationFailure(hints)) {
+        const failMessages = Object.values(hints)
+          .flat()
+          .filter((h) => h && h.status === 'fail')
+          .map((h) => h!.message)
+        setErrorMessages((prev) => ({ ...prev, [i]: failMessages.join(', ') }))
+        setStatuses((prev) => ({ ...prev, [i]: 'error' }))
+        setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
+        continue
+      }
+
+      setStatuses((prev) => ({ ...prev, [i]: 'loading' }))
+
+      try {
+        // 1. SPDX Identifier로 기존 라이선스 조회
+        if (row.spdxIdentifier?.trim()) {
+          const searchResult = await fetchLicenses(token, '', 0, 1, true, row.spdxIdentifier)
+          if (searchResult.success && searchResult.data && searchResult.data.length > 0) {
+            setStatuses((prev) => ({ ...prev, [i]: 'success' }))
+            setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
+            continue
+          }
+        }
+
+        // 2. 없으면 생성
+        const restrictionNames = parseMultiValue(row.restriction)
+        const restrictionIds = mapNamesToIds(restrictionNames)
+        const request = toLicenseCreateRequest(row, restrictionIds)
+        const result = await fetchCreateLicense(token, request)
+
+        if (result.success) {
+          setStatuses((prev) => ({ ...prev, [i]: 'success' }))
+        } else {
+          const errMsg = result.error ?? '라이선스 생성에 실패했습니다.'
+          setErrorMessages((prev) => ({ ...prev, [i]: errMsg }))
+          setStatuses((prev) => ({ ...prev, [i]: 'error' }))
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.'
+        setErrorMessages((prev) => ({ ...prev, [i]: errMsg }))
+        setStatuses((prev) => ({ ...prev, [i]: 'error' }))
+      }
+
+      setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
+    }
+
+    setBatchSaving(false)
+  }, [token, rows, statuses, batchSaving, mapNamesToIds])
+
   return (
     <div className="space-y-3">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleBatchContribute}
+          disabled={batchSaving || rows.length === 0}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {batchSaving ? (
+            <>
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              처리 중... ({batchProgress.current}/{batchProgress.total})
+            </>
+          ) : (
+            '전체 기여'
+          )}
+        </button>
+      </div>
+
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
         <table className="text-left" style={{ width: 1750, minWidth: 1750 }}>
           <colgroup>
@@ -190,50 +284,59 @@ export default function LicenseList({ rows }: LicenseListProps) {
               const globalIndex = (currentPage - 1) * PAGE_SIZE + i
               const status = statuses[globalIndex] ?? 'idle'
               return (
-                <tr
-                  key={globalIndex}
-                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-3 py-2.5 text-xs text-gray-400 text-center">
-                    {row.no}
-                  </td>
-                  <td className="px-3 py-2.5 text-sm text-gray-900 font-medium">
-                    <div className="truncate" title={row.licenseName}>
-                      {row.licenseName}
-                    </div>
-                    {row.nickName && (
-                      <div className="text-xs text-gray-400 truncate mt-0.5" title={row.nickName}>
-                        {row.nickName.replace(/\r?\n/g, ', ')}
+                <Fragment key={globalIndex}>
+                  <tr
+                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${status === 'success' ? 'opacity-40' : ''}`}
+                  >
+                    <td className="px-3 py-2.5 text-xs text-gray-400 text-center">
+                      {row.no}
+                    </td>
+                    <td className="px-3 py-2.5 text-sm text-gray-900 font-medium">
+                      <div className="truncate" title={row.licenseName}>
+                        {row.licenseName}
                       </div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-gray-600">
-                    <span className="truncate block" title={row.spdxIdentifier}>
-                      {row.spdxIdentifier}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <ObligationBadge value={row.obligationNotice} />
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span className="text-xs text-gray-500">{row.obligationDisclosingSrc}</span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <RestrictionBadges value={row.restriction} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <WebpageCell webpage={row.webpage} webpageList={row.webpageList} />
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-gray-600">
-                    {row.descriptionKo || <span className="text-gray-300">-</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <ContributeButton
-                      status={status}
-                      onClick={() => handleOpenModal(globalIndex, row)}
-                    />
-                  </td>
-                </tr>
+                      {row.nickName && (
+                        <div className="text-xs text-gray-400 truncate mt-0.5" title={row.nickName}>
+                          {row.nickName.replace(/\r?\n/g, ', ')}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600">
+                      <span className="truncate block" title={row.spdxIdentifier}>
+                        {row.spdxIdentifier}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <ObligationBadge value={row.obligationNotice} />
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className="text-xs text-gray-500">{row.obligationDisclosingSrc}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <RestrictionBadges value={row.restriction} />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <WebpageCell webpage={row.webpage} webpageList={row.webpageList} />
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600">
+                      {row.descriptionKo || <span className="text-gray-300">-</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <ContributeButton
+                        status={status}
+                        onClick={() => handleOpenModal(globalIndex, row)}
+                        disabled={batchSaving}
+                      />
+                    </td>
+                  </tr>
+                  {errorMessages[globalIndex] && status === 'error' && (
+                    <tr className="bg-red-50">
+                      <td colSpan={9} className="px-3 py-1 text-xs text-red-500">
+                        {errorMessages[globalIndex]}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               )
             })}
           </tbody>

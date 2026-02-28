@@ -60,7 +60,7 @@ describe('LicenseList 기여하기 흐름', () => {
     render(<LicenseList rows={[makeLicenseRow()]} />)
 
     const buttons = screen.getAllByRole('button')
-    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여'))
+    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     expect(contributeBtn).toBeDefined()
 
     await user.click(contributeBtn!)
@@ -78,7 +78,7 @@ describe('LicenseList 기여하기 흐름', () => {
 
     // 모달 열기
     const buttons = screen.getAllByRole('button')
-    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여'))
+    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
 
     // 저장 클릭
@@ -105,7 +105,7 @@ describe('LicenseList 기여하기 흐름', () => {
 
     // 모달 열기
     const buttons = screen.getAllByRole('button')
-    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여'))
+    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
 
     // 저장 클릭
@@ -136,7 +136,7 @@ describe('LicenseList 기여하기 흐름', () => {
 
     // 모달 열기
     const buttons = screen.getAllByRole('button')
-    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여'))
+    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
 
     // 저장 클릭
@@ -161,7 +161,7 @@ describe('LicenseList 기여하기 흐름', () => {
 
     // 모달 열기
     const buttons = screen.getAllByRole('button')
-    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여'))
+    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
 
     // 저장 클릭
@@ -183,7 +183,7 @@ describe('LicenseList 기여하기 흐름', () => {
     // 모달 열기 — validation fail(licenseName은 있지만 webpage가 없을 수 있음)
     // 여기선 webpage가 있으므로 저장 가능
     const buttons = screen.getAllByRole('button')
-    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여'))
+    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
 
     // 저장 클릭
@@ -207,7 +207,7 @@ describe('LicenseList 기여하기 흐름', () => {
 
     // 모달 열기
     const buttons = screen.getAllByRole('button')
-    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여'))
+    const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
 
     // 저장 → 실패
