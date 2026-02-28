@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import Modal from './Modal'
 import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
 import type { OssRow } from '@/lib/types'
-import type { FieldHint, OssFieldHints } from '@/lib/oss-validation'
+import type { FieldHint, FieldHints } from '@/lib/oss-validation'
 
 interface OssContributeModalProps {
   readonly open: boolean
@@ -36,7 +36,7 @@ const HINT_COLORS: Record<FieldHint['status'], string> = {
   info: 'text-blue-500',
 }
 
-function FieldHints({ hints, field }: { readonly hints: OssFieldHints; readonly field: string }) {
+function FieldHints({ hints, field }: { readonly hints: FieldHints; readonly field: string }) {
   const fieldHints = hints[field]
   if (!fieldHints || fieldHints.length === 0) return null
 

@@ -1,7 +1,11 @@
 'use client'
 
+import { useMemo } from 'react'
 import Modal from './Modal'
+import { validateLicenseRow } from '@/lib/license-validation'
+import { hasValidationFailure } from '@/lib/oss-validation'
 import type { LicenseRow } from '@/lib/types'
+import type { FieldHint, FieldHints } from '@/lib/oss-validation'
 
 interface LicenseContributeModalProps {
   readonly open: boolean
@@ -25,6 +29,27 @@ function parseMultiValue(value: string | null): readonly string[] {
   return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
 }
 
+const HINT_COLORS: Record<FieldHint['status'], string> = {
+  fail: 'text-red-500',
+  warn: 'text-amber-600',
+  info: 'text-blue-500',
+}
+
+function FieldHintsView({ hints, field }: { readonly hints: FieldHints; readonly field: string }) {
+  const fieldHints = hints[field]
+  if (!fieldHints || fieldHints.length === 0) return null
+
+  return (
+    <div className="mt-1 space-y-0.5">
+      {fieldHints.map((hint, i) => (
+        <p key={i} className={`text-xs ${HINT_COLORS[hint.status]}`}>
+          * {hint.message}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 export default function LicenseContributeModal({
   open,
   onClose,
@@ -35,17 +60,22 @@ export default function LicenseContributeModal({
   const restrictions = parseMultiValue(row.restriction)
   const webpageListUrls = parseMultiValue(row.webpageList)
 
+  const hints = useMemo(() => validateLicenseRow(row), [row])
+  const hasFail = useMemo(() => hasValidationFailure(hints), [hints])
+
   return (
     <Modal open={open} onClose={onClose} title="라이선스 기여하기">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={FIELD_LABEL}>License Name</label>
-            <p className={FIELD_VALUE}>{row.licenseName}</p>
+            <p className={FIELD_VALUE}>{row.licenseName || '-'}</p>
+            <FieldHintsView hints={hints} field="licenseName" />
           </div>
           <div>
             <label className={FIELD_LABEL}>SPDX Identifier</label>
             <p className={FIELD_VALUE}>{row.spdxIdentifier || '-'}</p>
+            <FieldHintsView hints={hints} field="spdxIdentifier" />
           </div>
         </div>
 
@@ -75,6 +105,7 @@ export default function LicenseContributeModal({
           <div>
             <label className={FIELD_LABEL}>Obligation Disclosing Src</label>
             <p className={FIELD_VALUE}>{row.obligationDisclosingSrc}</p>
+            <FieldHintsView hints={hints} field="obligationDisclosingSrc" />
           </div>
         </div>
 
@@ -94,6 +125,7 @@ export default function LicenseContributeModal({
           ) : (
             <p className="text-sm text-gray-400">-</p>
           )}
+          <FieldHintsView hints={hints} field="restriction" />
         </div>
 
         <div>
@@ -106,6 +138,7 @@ export default function LicenseContributeModal({
               ))}
             </div>
           )}
+          <FieldHintsView hints={hints} field="webpage" />
         </div>
 
         {row.descriptionKo && (
@@ -127,12 +160,17 @@ export default function LicenseContributeModal({
           <button
             type="button"
             onClick={onSave}
-            disabled={saving}
+            disabled={saving || hasFail}
             className="px-4 py-2 text-sm rounded-lg bg-olive-500 text-white hover:bg-olive-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? '처리 중...' : '저장'}
           </button>
         </div>
+        {hasFail && (
+          <p className="text-xs text-red-500 text-right">
+            필수 항목을 확인해주세요.
+          </p>
+        )}
       </div>
     </Modal>
   )

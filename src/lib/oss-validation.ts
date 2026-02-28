@@ -7,7 +7,7 @@ export interface FieldHint {
   readonly message: string
 }
 
-export type OssFieldHints = Partial<Record<string, readonly FieldHint[]>>
+export type FieldHints = Partial<Record<string, readonly FieldHint[]>>
 
 function parseMultiValue(value: string | null): readonly string[] {
   if (!value) return []
@@ -38,7 +38,7 @@ function addHint(
   hints[field].push({ status, message })
 }
 
-export function validateOssRow(row: OssRow): OssFieldHints {
+export function validateOssRow(row: OssRow): FieldHints {
   const hints: Record<string, FieldHint[]> = {}
   const declaredLicenses = parseMultiValue(row.declaredLicenseList)
 
@@ -93,7 +93,7 @@ export function validateOssRow(row: OssRow): OssFieldHints {
   return hints
 }
 
-export function hasValidationFailure(hints: OssFieldHints): boolean {
+export function hasValidationFailure(hints: FieldHints): boolean {
   return Object.values(hints).some(
     (fieldHints) => fieldHints?.some((h) => h.status === 'fail'),
   )
