@@ -12,6 +12,8 @@ interface OssContributeModalProps {
   readonly row: OssRow
   readonly onSave: () => void
   readonly saving: boolean
+  readonly licenseMap: ReadonlyMap<string, number | null>
+  readonly licenseMappingLoading: boolean
 }
 
 const FIELD_LABEL = 'block text-xs font-medium text-gray-500 mb-1'
@@ -22,10 +24,25 @@ function parseMultiValue(value: string | null): readonly string[] {
   return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
 }
 
-function LicenseBadge({ value }: { readonly value: string }) {
+function LicenseBadgeWithMapping({
+  name,
+  id,
+  loading,
+}: {
+  readonly name: string
+  readonly id: number | null
+  readonly loading: boolean
+}) {
   return (
-    <span className="inline-block px-2 py-0.5 text-xs font-medium rounded border bg-blue-50 text-blue-700 border-blue-200">
-      {value}
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border bg-blue-50 text-blue-700 border-blue-200">
+      {name}
+      {loading ? (
+        <span className="text-[10px] opacity-60">...</span>
+      ) : id !== null ? (
+        <span className="text-[10px] opacity-60">#{id}</span>
+      ) : (
+        <span className="text-[10px] text-red-500">?</span>
+      )}
     </span>
   )
 }
@@ -36,7 +53,7 @@ const HINT_COLORS: Record<FieldHint['status'], string> = {
   info: 'text-blue-500',
 }
 
-function FieldHints({ hints, field }: { readonly hints: FieldHints; readonly field: string }) {
+function FieldHintsView({ hints, field }: { readonly hints: FieldHints; readonly field: string }) {
   const fieldHints = hints[field]
   if (!fieldHints || fieldHints.length === 0) return null
 
@@ -57,6 +74,8 @@ export default function OssContributeModal({
   row,
   onSave,
   saving,
+  licenseMap,
+  licenseMappingLoading,
 }: OssContributeModalProps) {
   const declaredLicenses = parseMultiValue(row.declaredLicenseList)
   const detectedLicenses = parseMultiValue(row.detectedLicenseList)
@@ -64,6 +83,25 @@ export default function OssContributeModal({
 
   const hints = useMemo(() => validateOssRow(row), [row])
   const hasFail = useMemo(() => hasValidationFailure(hints), [hints])
+
+  const declaredMapping = useMemo(() => {
+    return declaredLicenses.map((name) => ({
+      name,
+      id: licenseMap.get(name) ?? null,
+    }))
+  }, [declaredLicenses, licenseMap])
+
+  const detectedMapping = useMemo(() => {
+    return detectedLicenses.map((name) => ({
+      name,
+      id: licenseMap.get(name) ?? null,
+    }))
+  }, [detectedLicenses, licenseMap])
+
+  const unmappedLicenses = useMemo(() => {
+    const all = [...declaredMapping, ...detectedMapping]
+    return all.filter((l) => l.id === null)
+  }, [declaredMapping, detectedMapping])
 
   return (
     <Modal open={open} onClose={onClose} title="OSS 기여하기">
@@ -76,7 +114,7 @@ export default function OssContributeModal({
           <div>
             <label className={FIELD_LABEL}>Version</label>
             <p className={FIELD_VALUE}>{row.version || '-'}</p>
-            <FieldHints hints={hints} field="version" />
+            <FieldHintsView hints={hints} field="version" />
           </div>
         </div>
 
@@ -106,47 +144,63 @@ export default function OssContributeModal({
               ))}
             </div>
           )}
-          <FieldHints hints={hints} field="downloadLocation" />
+          <FieldHintsView hints={hints} field="downloadLocation" />
         </div>
 
         <div>
           <label className={FIELD_LABEL}>License Combination</label>
           <p className={FIELD_VALUE}>{row.licenseCombination || '-'}</p>
-          <FieldHints hints={hints} field="licenseCombination" />
+          <FieldHintsView hints={hints} field="licenseCombination" />
         </div>
 
         <div>
           <label className={FIELD_LABEL}>Declared License</label>
-          {declaredLicenses.length > 0 ? (
+          {declaredMapping.length > 0 ? (
             <div className="flex flex-wrap gap-1.5 mt-1">
-              {declaredLicenses.map((lic, i) => (
-                <LicenseBadge key={i} value={lic} />
+              {declaredMapping.map((item, i) => (
+                <LicenseBadgeWithMapping
+                  key={i}
+                  name={item.name}
+                  id={item.id}
+                  loading={licenseMappingLoading}
+                />
               ))}
             </div>
           ) : (
             <p className="text-sm text-gray-400">-</p>
           )}
-          <FieldHints hints={hints} field="declaredLicense" />
+          <FieldHintsView hints={hints} field="declaredLicense" />
         </div>
 
         <div>
           <label className={FIELD_LABEL}>Detected License</label>
-          {detectedLicenses.length > 0 ? (
+          {detectedMapping.length > 0 ? (
             <div className="flex flex-wrap gap-1.5 mt-1">
-              {detectedLicenses.map((lic, i) => (
-                <LicenseBadge key={i} value={lic} />
+              {detectedMapping.map((item, i) => (
+                <LicenseBadgeWithMapping
+                  key={i}
+                  name={item.name}
+                  id={item.id}
+                  loading={licenseMappingLoading}
+                />
               ))}
             </div>
           ) : (
             <p className="text-sm text-gray-400">-</p>
           )}
-          <FieldHints hints={hints} field="detectedLicense" />
+          <FieldHintsView hints={hints} field="detectedLicense" />
         </div>
+
+        {!licenseMappingLoading && unmappedLicenses.length > 0 && (
+          <p className="text-xs text-amber-600">
+            * 매핑되지 않은 License: {[...new Set(unmappedLicenses.map((l) => l.name))].join(', ')}
+          </p>
+        )}
 
         <div>
           <label className={FIELD_LABEL}>Copyright</label>
           <p className={FIELD_VALUE}>{row.copyright || '-'}</p>
-          <FieldHints hints={hints} field="copyright" />
+          <FieldHintsView hints={hints} field="copyright" />
         </div>
 
         {row.descriptionKo && (
@@ -168,10 +222,10 @@ export default function OssContributeModal({
           <button
             type="button"
             onClick={onSave}
-            disabled={saving || hasFail}
+            disabled={saving || hasFail || licenseMappingLoading}
             className="px-4 py-2 text-sm rounded-lg bg-olive-500 text-white hover:bg-olive-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {saving ? '처리 중...' : '저장'}
+            {saving ? '처리 중...' : licenseMappingLoading ? '매핑 중...' : '저장'}
           </button>
         </div>
         {hasFail && (

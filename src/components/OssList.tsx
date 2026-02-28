@@ -2,7 +2,9 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { contribute } from '@/lib/api-client'
+import { useLicenseMapping } from '@/hooks/useLicenseMapping'
+import { fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
+import { toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
 import ContributeButton from './ContributeButton'
 import OssContributeModal from './OssContributeModal'
 import Pagination from './Pagination'
@@ -41,6 +43,16 @@ export default function OssList({ rows }: OssListProps) {
   const [saving, setSaving] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
 
+  const selectedRowLicenseNames = useMemo(() => {
+    if (!selectedRow) return []
+    const names: string[] = []
+    for (const name of parseMultiValue(selectedRow.row.declaredLicenseList)) names.push(name)
+    for (const name of parseMultiValue(selectedRow.row.detectedLicenseList)) names.push(name)
+    return names
+  }, [selectedRow])
+
+  const { licenseMap, loading: licenseMappingLoading, mapNamesToIds: mapLicenseNamesToIds } = useLicenseMapping(selectedRowLicenseNames)
+
   useEffect(() => {
     setCurrentPage(1)
   }, [rows])
@@ -66,24 +78,31 @@ export default function OssList({ rows }: OssListProps) {
     setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
 
     try {
-      const result = await contribute(token, 'oss', {
-        ossName: row.ossName,
-        nickname: row.nickname,
-        homepage: row.homepage,
-        downloadLocation: row.downloadLocation,
-        downloadLocationList: row.downloadLocationList,
-        version: row.version,
-        licenseCombination: row.licenseCombination,
-        declaredLicenseList: row.declaredLicenseList,
-        detectedLicenseList: row.detectedLicenseList,
-        copyright: row.copyright,
-        publisher: row.publisher,
-        description: row.description,
-        descriptionKo: row.descriptionKo,
-      })
+      // 1. Create OSS master
+      const ossRequest = toOssCreateRequest(row)
+      const ossResult = await fetchCreateOss(token, ossRequest)
+      if (!ossResult.success || !ossResult.data) {
+        throw new Error('OSS 생성에 실패했습니다.')
+      }
+      const ossMasterId = ossResult.data.oss_master_id
+
+      // 2. Create OSS Version (if version exists)
+      if (row.version?.trim()) {
+        const declaredNames = parseMultiValue(row.declaredLicenseList)
+        const detectedNames = parseMultiValue(row.detectedLicenseList)
+        const declaredIds = mapLicenseNamesToIds(declaredNames)
+        const detectedIds = mapLicenseNamesToIds(detectedNames)
+
+        const versionRequest = toOssVersionCreateRequest(row, ossMasterId, declaredIds, detectedIds)
+        const versionResult = await fetchCreateOssVersion(token, versionRequest)
+        if (!versionResult.success) {
+          throw new Error('OSS Version 생성에 실패했습니다.')
+        }
+      }
+
       setStatuses((prev) => ({
         ...prev,
-        [index]: result.success ? 'success' : 'error',
+        [index]: 'success',
       }))
     } catch {
       setStatuses((prev) => ({ ...prev, [index]: 'error' }))
@@ -91,7 +110,7 @@ export default function OssList({ rows }: OssListProps) {
       setSaving(false)
       setSelectedRow(null)
     }
-  }, [token, selectedRow])
+  }, [token, selectedRow, mapLicenseNamesToIds])
 
   return (
     <div className="space-y-3">
@@ -198,6 +217,8 @@ export default function OssList({ rows }: OssListProps) {
           row={selectedRow.row}
           onSave={handleSave}
           saving={saving}
+          licenseMap={licenseMap}
+          licenseMappingLoading={licenseMappingLoading}
         />
       )}
     </div>
