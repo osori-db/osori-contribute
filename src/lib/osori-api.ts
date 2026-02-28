@@ -73,11 +73,13 @@ export async function searchLicenses(
   page: number = 0,
   size: number = 10,
   exactMatch: boolean = true,
+  spdxIdentifier?: string,
 ): Promise<OsoriApiResult<readonly OsoriLicense[]>> {
   const query = makeListQuery({ page, size, sort: 'id', exactMatch })
   const nameParam = name.trim() ? `&name=${encodeURIComponent(name.trim())}` : ''
+  const spdxParam = spdxIdentifier?.trim() ? `&spdx_identifier=${encodeURIComponent(spdxIdentifier.trim())}` : ''
   const response = await externalFetch(
-    `${API_PREFIX}/licenses${query}${nameParam}`,
+    `${API_PREFIX}/licenses${query}${nameParam}${spdxParam}`,
     token,
   )
   return extractListData<OsoriLicense>(response)

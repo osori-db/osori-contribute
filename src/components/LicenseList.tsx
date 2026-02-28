@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRestrictions } from '@/hooks/useRestrictions'
-import { fetchCreateLicense } from '@/lib/api-client'
+import { fetchLicenses, fetchCreateLicense } from '@/lib/api-client'
 import { toLicenseCreateRequest } from '@/lib/license-mapper'
 import ContributeButton from './ContributeButton'
 import LicenseContributeModal from './LicenseContributeModal'
@@ -93,6 +93,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
   const [selectedRow, setSelectedRow] = useState<{ row: LicenseRow; index: number } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
 
   useEffect(() => {
@@ -110,6 +111,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
 
   const handleCloseModal = useCallback(() => {
     setSelectedRow(null)
+    setSaveError(null)
   }, [])
 
   const handleSave = useCallback(async () => {
@@ -117,22 +119,41 @@ export default function LicenseList({ rows }: LicenseListProps) {
 
     const { row, index } = selectedRow
     setSaving(true)
+    setSaveError(null)
     setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
 
     try {
+      // 1. SPDX Identifier로 기존 라이선스 조회 (리뷰 안된 것 포함)
+      if (row.spdxIdentifier?.trim()) {
+        const searchResult = await fetchLicenses(token, '', 0, 1, true, row.spdxIdentifier)
+        if (searchResult.success && searchResult.data && searchResult.data.length > 0) {
+          // 이미 등록된 라이선스
+          setStatuses((prev) => ({ ...prev, [index]: 'success' }))
+          setSaving(false)
+          setSelectedRow(null)
+          return
+        }
+      }
+
+      // 2. 없으면 생성
       const restrictionNames = parseMultiValue(row.restriction)
       const restrictionIds = mapNamesToIds(restrictionNames)
       const request = toLicenseCreateRequest(row, restrictionIds)
       const result = await fetchCreateLicense(token, request)
-      setStatuses((prev) => ({
-        ...prev,
-        [index]: result.success ? 'success' : 'error',
-      }))
-    } catch {
+
+      if (result.success) {
+        setStatuses((prev) => ({ ...prev, [index]: 'success' }))
+        setSaving(false)
+        setSelectedRow(null)
+      } else {
+        setSaveError(result.error ?? '라이선스 생성에 실패했습니다.')
+        setStatuses((prev) => ({ ...prev, [index]: 'error' }))
+        setSaving(false)
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
       setStatuses((prev) => ({ ...prev, [index]: 'error' }))
-    } finally {
       setSaving(false)
-      setSelectedRow(null)
     }
   }, [token, selectedRow, mapNamesToIds])
 
@@ -233,6 +254,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
           row={selectedRow.row}
           onSave={handleSave}
           saving={saving}
+          saveError={saveError}
           restrictions={restrictions}
           mapNamesToIds={mapNamesToIds}
         />

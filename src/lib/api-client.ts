@@ -48,6 +48,7 @@ export async function fetchLicenses(
   page: number = 0,
   size: number = 10,
   exactMatch: boolean = true,
+  spdxIdentifier?: string,
 ): Promise<ApiResponse<readonly OsoriLicense[]>> {
   const params = new URLSearchParams({
     name,
@@ -55,6 +56,9 @@ export async function fetchLicenses(
     size: String(size),
     exactMatch: String(exactMatch),
   })
+  if (spdxIdentifier) {
+    params.set('spdxIdentifier', spdxIdentifier)
+  }
   return apiFetch<readonly OsoriLicense[]>(`/api/osori/licenses?${params}`, token)
 }
 

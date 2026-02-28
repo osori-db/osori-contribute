@@ -20,8 +20,9 @@ export async function GET(request: NextRequest) {
     const page = Number(searchParams.get('page') ?? '0')
     const size = Number(searchParams.get('size') ?? '10')
     const exactMatch = searchParams.get('exactMatch') !== 'false'
+    const spdxIdentifier = searchParams.get('spdxIdentifier') ?? undefined
 
-    const result = await searchLicenses(token, name, page, size, exactMatch)
+    const result = await searchLicenses(token, name, page, size, exactMatch, spdxIdentifier)
     return NextResponse.json(result)
   } catch (error) {
     return NextResponse.json(

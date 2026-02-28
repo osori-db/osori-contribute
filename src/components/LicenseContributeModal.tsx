@@ -14,6 +14,7 @@ interface LicenseContributeModalProps {
   readonly row: LicenseRow
   readonly onSave: () => void
   readonly saving: boolean
+  readonly saveError?: string | null
   readonly restrictions: readonly OsoriRestriction[]
   readonly mapNamesToIds: (names: readonly string[]) => readonly number[]
 }
@@ -59,6 +60,7 @@ export default function LicenseContributeModal({
   row,
   onSave,
   saving,
+  saveError,
   restrictions: osoriRestrictions,
   mapNamesToIds,
 }: LicenseContributeModalProps) {
@@ -174,6 +176,12 @@ export default function LicenseContributeModal({
           <div>
             <label className={FIELD_LABEL}>Description</label>
             <p className={FIELD_VALUE}>{row.descriptionKo}</p>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+            <p className="text-sm text-red-700">{saveError}</p>
           </div>
         )}
 
