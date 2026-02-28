@@ -57,3 +57,29 @@ export interface LicenseData {
   readonly rows: readonly LicenseRow[]
   readonly fileName: string
 }
+
+export interface OssRow {
+  readonly no: number
+  readonly ossName: string
+  readonly nickname: string | null
+  readonly homepage: string | null
+  readonly downloadLocation: string
+  readonly downloadLocationList: string | null
+  readonly attribution: string | null
+  readonly complianceNotice: string | null
+  readonly complianceNoticeKo: string | null
+  readonly publisher: string | null
+  readonly version: string | null
+  readonly licenseCombination: string | null
+  readonly declaredLicenseList: string | null
+  readonly detectedLicenseList: string | null
+  readonly copyright: string | null
+  readonly releaseDate: string | null
+  readonly description: string | null
+  readonly descriptionKo: string | null
+}
+
+export interface OssData {
+  readonly rows: readonly OssRow[]
+  readonly fileName: string
+}
