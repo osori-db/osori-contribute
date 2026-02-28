@@ -1,7 +1,10 @@
 'use client'
 
+import { useMemo } from 'react'
 import Modal from './Modal'
+import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
 import type { OssRow } from '@/lib/types'
+import type { FieldHint, OssFieldHints } from '@/lib/oss-validation'
 
 interface OssContributeModalProps {
   readonly open: boolean
@@ -27,6 +30,27 @@ function LicenseBadge({ value }: { readonly value: string }) {
   )
 }
 
+const HINT_COLORS: Record<FieldHint['status'], string> = {
+  fail: 'text-red-500',
+  warn: 'text-amber-600',
+  info: 'text-blue-500',
+}
+
+function FieldHints({ hints, field }: { readonly hints: OssFieldHints; readonly field: string }) {
+  const fieldHints = hints[field]
+  if (!fieldHints || fieldHints.length === 0) return null
+
+  return (
+    <div className="mt-1 space-y-0.5">
+      {fieldHints.map((hint, i) => (
+        <p key={i} className={`text-xs ${HINT_COLORS[hint.status]}`}>
+          * {hint.message}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 export default function OssContributeModal({
   open,
   onClose,
@@ -37,6 +61,9 @@ export default function OssContributeModal({
   const declaredLicenses = parseMultiValue(row.declaredLicenseList)
   const detectedLicenses = parseMultiValue(row.detectedLicenseList)
   const downloadLocations = parseMultiValue(row.downloadLocationList)
+
+  const hints = useMemo(() => validateOssRow(row), [row])
+  const hasFail = useMemo(() => hasValidationFailure(hints), [hints])
 
   return (
     <Modal open={open} onClose={onClose} title="OSS 기여하기">
@@ -49,6 +76,7 @@ export default function OssContributeModal({
           <div>
             <label className={FIELD_LABEL}>Version</label>
             <p className={FIELD_VALUE}>{row.version || '-'}</p>
+            <FieldHints hints={hints} field="version" />
           </div>
         </div>
 
@@ -78,11 +106,13 @@ export default function OssContributeModal({
               ))}
             </div>
           )}
+          <FieldHints hints={hints} field="downloadLocation" />
         </div>
 
         <div>
           <label className={FIELD_LABEL}>License Combination</label>
           <p className={FIELD_VALUE}>{row.licenseCombination || '-'}</p>
+          <FieldHints hints={hints} field="licenseCombination" />
         </div>
 
         <div>
@@ -96,6 +126,7 @@ export default function OssContributeModal({
           ) : (
             <p className="text-sm text-gray-400">-</p>
           )}
+          <FieldHints hints={hints} field="declaredLicense" />
         </div>
 
         <div>
@@ -109,14 +140,14 @@ export default function OssContributeModal({
           ) : (
             <p className="text-sm text-gray-400">-</p>
           )}
+          <FieldHints hints={hints} field="detectedLicense" />
         </div>
 
-        {row.copyright && (
-          <div>
-            <label className={FIELD_LABEL}>Copyright</label>
-            <p className={FIELD_VALUE}>{row.copyright}</p>
-          </div>
-        )}
+        <div>
+          <label className={FIELD_LABEL}>Copyright</label>
+          <p className={FIELD_VALUE}>{row.copyright || '-'}</p>
+          <FieldHints hints={hints} field="copyright" />
+        </div>
 
         {row.descriptionKo && (
           <div>
@@ -137,12 +168,17 @@ export default function OssContributeModal({
           <button
             type="button"
             onClick={onSave}
-            disabled={saving}
+            disabled={saving || hasFail}
             className="px-4 py-2 text-sm rounded-lg bg-olive-500 text-white hover:bg-olive-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? '처리 중...' : '저장'}
           </button>
         </div>
+        {hasFail && (
+          <p className="text-xs text-red-500 text-right">
+            필수 항목을 확인해주세요.
+          </p>
+        )}
       </div>
     </Modal>
   )
