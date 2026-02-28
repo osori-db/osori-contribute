@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { contribute } from '@/lib/api-client'
 import ContributeButton from './ContributeButton'
+import LicenseContributeModal from './LicenseContributeModal'
 import type { LicenseRow, ContributeStatus } from '@/lib/types'
 
 interface LicenseListProps {
@@ -79,11 +80,23 @@ function WebpageCell({ webpage, webpageList }: { readonly webpage: string; reado
 export default function LicenseList({ rows }: LicenseListProps) {
   const { token } = useAuth()
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
+  const [selectedRow, setSelectedRow] = useState<{ row: LicenseRow; index: number } | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  const handleContribute = useCallback(async (rowIndex: number, row: LicenseRow) => {
-    if (!token) return
+  const handleOpenModal = useCallback((index: number, row: LicenseRow) => {
+    setSelectedRow({ row, index })
+  }, [])
 
-    setStatuses((prev) => ({ ...prev, [rowIndex]: 'loading' }))
+  const handleCloseModal = useCallback(() => {
+    setSelectedRow(null)
+  }, [])
+
+  const handleSave = useCallback(async () => {
+    if (!token || !selectedRow) return
+
+    const { row, index } = selectedRow
+    setSaving(true)
+    setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
 
     try {
       const result = await contribute(token, 'license', {
@@ -99,12 +112,15 @@ export default function LicenseList({ rows }: LicenseListProps) {
       })
       setStatuses((prev) => ({
         ...prev,
-        [rowIndex]: result.success ? 'success' : 'error',
+        [index]: result.success ? 'success' : 'error',
       }))
     } catch {
-      setStatuses((prev) => ({ ...prev, [rowIndex]: 'error' }))
+      setStatuses((prev) => ({ ...prev, [index]: 'error' }))
+    } finally {
+      setSaving(false)
+      setSelectedRow(null)
     }
-  }, [token])
+  }, [token, selectedRow])
 
   return (
     <div className="space-y-3">
@@ -181,7 +197,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
                   <td className="px-3 py-2.5 text-center">
                     <ContributeButton
                       status={status}
-                      onClick={() => handleContribute(index, row)}
+                      onClick={() => handleOpenModal(index, row)}
                     />
                   </td>
                 </tr>
@@ -190,6 +206,16 @@ export default function LicenseList({ rows }: LicenseListProps) {
           </tbody>
         </table>
       </div>
+
+      {selectedRow && (
+        <LicenseContributeModal
+          open={true}
+          onClose={handleCloseModal}
+          row={selectedRow.row}
+          onSave={handleSave}
+          saving={saving}
+        />
+      )}
     </div>
   )
 }
