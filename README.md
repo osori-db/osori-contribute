@@ -9,7 +9,7 @@
 - **Language**: TypeScript 5
 - **Validation**: Zod 4
 - **Excel**: xlsx (SheetJS)
-- **Testing**: Vitest + Testing Library (56 tests)
+- **Testing**: Vitest + Testing Library (61 tests)
 - **Theme**: OLIVE UI 기반 녹색 계열
 
 ## 시작하기
@@ -103,6 +103,7 @@ SPDX Identifier로 OSORI 조회
 | **License Combination** | AND/OR 조합을 지원합니다. |
 | **입력 검증** | Download Location URL, Copyright 형식 등을 사전 검증합니다. |
 | **기여하기 모달** | 라이선스 배지, 매핑 상태, 검증 힌트를 포함한 상세 확인 모달을 제공합니다. |
+| **전체 기여** | "전체 기여" 버튼으로 모든 항목을 순차적으로 일괄 처리합니다. 진행률이 실시간 표시됩니다. |
 
 **기여 흐름:**
 ```
@@ -122,13 +123,14 @@ Download Location → purl 생성 (GitHub만)
 | 상태 | 표시 | 설명 |
 |------|------|------|
 | 대기 | 녹색 "기여하기" 버튼 | 기여 전 초기 상태 |
+| 이미 존재함 | 회색 "이미 존재함" | SPDX/purl 사전 조회로 이미 등록된 항목 |
 | 처리 중 | 스피너 + "처리 중..." | API 호출 진행 중 |
 | 완료 | 녹색 체크 "완료" | 기여 성공, 행 반투명 처리 |
 | 실패 | 빨간색 "재시도" | 기여 실패, 클릭하여 재시도 가능 |
 
 ### 6. 전체 기여 (배치)
 
-라이선스 탭에서 "전체 기여" 버튼을 클릭하면 모든 항목을 순차적으로 처리합니다:
+라이선스/OSS 탭에서 "전체 기여" 버튼을 클릭하면 모든 항목을 순차적으로 처리합니다:
 - 진행률 표시: `처리 중... (3/25)`
 - 이미 성공한 항목은 자동 건너뜀
 - 검증 실패 항목은 에러 메시지와 함께 건너뜀
@@ -169,7 +171,8 @@ src/
 │   ├── LicenseList.tsx               # 라이선스 목록 + 개별/전체 기여
 │   ├── LicenseContributeModal.tsx    # 라이선스 기여 확인 모달
 │   ├── OssTab.tsx                    # OSS 탭 컨테이너
-│   ├── OssList.tsx                   # OSS 목록 + 개별 기여
+│   ├── DataList.tsx                   # 범용 데이터 목록 (미사용)
+│   ├── OssList.tsx                   # OSS 목록 + 개별/전체 기여
 │   └── OssContributeModal.tsx        # OSS 기여 확인 모달
 │
 ├── contexts/
@@ -232,15 +235,15 @@ Next.js API Routes가 프록시 역할을 하여 CORS를 우회하고 외부 API
 
 ## 테스트
 
-5개 테스트 파일, 총 56개 테스트 케이스:
+5개 테스트 파일, 총 61개 테스트 케이스:
 
 | 파일 | 테스트 수 | 설명 |
 |------|-----------|------|
-| `license-mapper.test.ts` | 14 | 라이선스 → OSORI 요청 변환 |
+| `license-mapper.test.ts` | 10 | 라이선스 → OSORI 요청 변환 |
 | `oss-mapper.test.ts` | 21 | OSS → OSORI 요청 변환 + purl 생성 |
-| `useLicenseMapping.test.ts` | 4 | 라이선스 이름→ID 매핑 훅 |
+| `useLicenseMapping.test.ts` | 8 | 라이선스 이름→ID 매핑 훅 |
 | `LicenseList.test.tsx` | 7 | 라이선스 기여 흐름 (SPDX 조회→생성) |
-| `OssList.test.tsx` | 10 | OSS 기여 흐름 (purl 조회→OSS/버전 생성) |
+| `OssList.test.tsx` | 15 | OSS 기여 흐름 (purl 사전 조회→OSS/버전 생성) |
 
 ```bash
 # 테스트 실행
