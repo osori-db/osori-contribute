@@ -55,8 +55,10 @@ beforeEach(() => {
 // ─── Tests ───
 
 describe('LicenseList 기여하기 흐름', () => {
-  it('기여하기 버튼 클릭 시 모달이 열린다', async () => {
+  it('기여하기 클릭 시 SPDX 조회 후 미존재하면 모달이 열린다', async () => {
     const user = userEvent.setup()
+    mockFetchLicenses.mockResolvedValue({ success: true, data: [] })
+
     render(<LicenseList rows={[makeLicenseRow()]} />)
 
     const buttons = screen.getAllByRole('button')
@@ -64,10 +66,18 @@ describe('LicenseList 기여하기 흐름', () => {
     expect(contributeBtn).toBeDefined()
 
     await user.click(contributeBtn!)
-    expect(screen.getByText('라이선스 기여하기')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByText('라이선스 기여하기')).toBeInTheDocument()
+    })
+
+    // SPDX 조회가 호출됨
+    expect(mockFetchLicenses).toHaveBeenCalledWith(
+      mockToken, '', 0, 1, true, 'Apache-2.0',
+    )
   })
 
-  it('SPDX 조회 → 이미 존재하면 생성 API를 호출하지 않고 성공 처리한다', async () => {
+  it('기여하기 클릭 시 SPDX 조회 → 이미 존재하면 모달 없이 "이미 존재함" 표시', async () => {
     const user = userEvent.setup()
     mockFetchLicenses.mockResolvedValue({
       success: true,
@@ -76,44 +86,43 @@ describe('LicenseList 기여하기 흐름', () => {
 
     render(<LicenseList rows={[makeLicenseRow()]} />)
 
-    // 모달 열기
     const buttons = screen.getAllByRole('button')
     const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
 
-    // 저장 클릭
-    const saveBtn = screen.getByText('저장')
-    await user.click(saveBtn)
-
+    // "이미 존재함" 표시
     await waitFor(() => {
-      // fetchLicenses가 SPDX로 호출됨
-      expect(mockFetchLicenses).toHaveBeenCalledWith(
-        mockToken, '', 0, 1, true, 'Apache-2.0',
-      )
+      expect(screen.getByText('이미 존재함')).toBeInTheDocument()
     })
 
-    // 이미 존재하므로 createLicense는 호출되지 않음
+    // 모달이 열리지 않음
+    expect(screen.queryByText('라이선스 기여하기')).not.toBeInTheDocument()
+
+    // 생성 API는 호출되지 않음
     expect(mockFetchCreateLicense).not.toHaveBeenCalled()
   })
 
-  it('SPDX 조회 → 없으면 생성 API를 호출한다', async () => {
+  it('SPDX 조회 → 없으면 모달에서 생성 API를 호출한다', async () => {
     const user = userEvent.setup()
     mockFetchLicenses.mockResolvedValue({ success: true, data: [] })
     mockFetchCreateLicense.mockResolvedValue({ success: true, data: { id: 200, message: 'created' } })
 
     render(<LicenseList rows={[makeLicenseRow()]} />)
 
-    // 모달 열기
+    // 기여하기 클릭 → SPDX 조회 → 미존재 → 모달 열림
     const buttons = screen.getAllByRole('button')
     const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
+
+    await waitFor(() => {
+      expect(screen.getByText('라이선스 기여하기')).toBeInTheDocument()
+    })
 
     // 저장 클릭
     const saveBtn = screen.getByText('저장')
     await user.click(saveBtn)
 
     await waitFor(() => {
-      // 조회 후 생성 API가 호출됨
       expect(mockFetchCreateLicense).toHaveBeenCalledTimes(1)
     })
 
@@ -138,6 +147,10 @@ describe('LicenseList 기여하기 흐름', () => {
     const buttons = screen.getAllByRole('button')
     const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
+
+    await waitFor(() => {
+      expect(screen.getByText('라이선스 기여하기')).toBeInTheDocument()
+    })
 
     // 저장 클릭
     const saveBtn = screen.getByText('저장')
@@ -164,6 +177,10 @@ describe('LicenseList 기여하기 흐름', () => {
     const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
 
+    await waitFor(() => {
+      expect(screen.getByText('라이선스 기여하기')).toBeInTheDocument()
+    })
+
     // 저장 클릭
     const saveBtn = screen.getByText('저장')
     await user.click(saveBtn)
@@ -179,7 +196,7 @@ describe('LicenseList 기여하기 흐름', () => {
     const row = makeLicenseRow({ spdxIdentifier: '' })
     render(<LicenseList rows={[row]} />)
 
-    // 모달 열기
+    // SPDX가 없으면 조회 없이 바로 모달 열림
     const buttons = screen.getAllByRole('button')
     const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
@@ -207,6 +224,10 @@ describe('LicenseList 기여하기 흐름', () => {
     const buttons = screen.getAllByRole('button')
     const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
+
+    await waitFor(() => {
+      expect(screen.getByText('라이선스 기여하기')).toBeInTheDocument()
+    })
 
     // 저장 → 실패
     await user.click(screen.getByText('저장'))

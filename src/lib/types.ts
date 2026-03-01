@@ -10,7 +10,7 @@ export interface ExcelData {
 
 export type ContributeType = 'license' | 'oss'
 
-export type ContributeStatus = 'idle' | 'loading' | 'success' | 'error'
+export type ContributeStatus = 'idle' | 'loading' | 'success' | 'error' | 'exists'
 
 export interface ContributeRequest {
   readonly type: ContributeType

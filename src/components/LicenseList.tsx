@@ -110,9 +110,26 @@ export default function LicenseList({ rows }: LicenseListProps) {
     return rows.slice(start, start + PAGE_SIZE)
   }, [rows, currentPage])
 
-  const handleOpenModal = useCallback((index: number, row: LicenseRow) => {
+  const handleOpenModal = useCallback(async (index: number, row: LicenseRow) => {
+    if (!token) return
+
+    // SPDX Identifier가 있으면 먼저 존재 여부 확인
+    if (row.spdxIdentifier?.trim()) {
+      setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
+      try {
+        const searchResult = await fetchLicenses(token, '', 0, 1, true, row.spdxIdentifier)
+        if (searchResult.success && searchResult.data && searchResult.data.length > 0) {
+          setStatuses((prev) => ({ ...prev, [index]: 'exists' }))
+          return
+        }
+      } catch {
+        // 조회 실패 시 모달로 진행
+      }
+      setStatuses((prev) => ({ ...prev, [index]: 'idle' }))
+    }
+
     setSelectedRow({ row, index })
-  }, [])
+  }, [token])
 
   const handleCloseModal = useCallback(() => {
     setSelectedRow(null)
@@ -128,19 +145,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
     setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
 
     try {
-      // 1. SPDX Identifier로 기존 라이선스 조회 (리뷰 안된 것 포함)
-      if (row.spdxIdentifier?.trim()) {
-        const searchResult = await fetchLicenses(token, '', 0, 1, true, row.spdxIdentifier)
-        if (searchResult.success && searchResult.data && searchResult.data.length > 0) {
-          // 이미 등록된 라이선스
-          setStatuses((prev) => ({ ...prev, [index]: 'success' }))
-          setSaving(false)
-          setSelectedRow(null)
-          return
-        }
-      }
-
-      // 2. 없으면 생성
+      // 모달 열기 전에 SPDX 조회를 완료했으므로 바로 생성
       const restrictionNames = parseMultiValue(row.restriction)
       const restrictionIds = mapNamesToIds(restrictionNames)
       const request = toLicenseCreateRequest(row, restrictionIds)
@@ -173,8 +178,8 @@ export default function LicenseList({ rows }: LicenseListProps) {
       const row = rows[i]
       const currentStatus = statuses[i]
 
-      // 이미 성공한 항목은 스킵
-      if (currentStatus === 'success') {
+      // 이미 성공했거나 존재하는 항목은 스킵
+      if (currentStatus === 'success' || currentStatus === 'exists') {
         setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
         continue
       }
@@ -199,7 +204,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
         if (row.spdxIdentifier?.trim()) {
           const searchResult = await fetchLicenses(token, '', 0, 1, true, row.spdxIdentifier)
           if (searchResult.success && searchResult.data && searchResult.data.length > 0) {
-            setStatuses((prev) => ({ ...prev, [i]: 'success' }))
+            setStatuses((prev) => ({ ...prev, [i]: 'exists' }))
             setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
             continue
           }
@@ -286,7 +291,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
               return (
                 <Fragment key={globalIndex}>
                   <tr
-                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${status === 'success' ? 'opacity-40' : ''}`}
+                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${status === 'success' || status === 'exists' ? 'opacity-40' : ''}`}
                   >
                     <td className="px-3 py-2.5 text-xs text-gray-400 text-center">
                       {row.no}
