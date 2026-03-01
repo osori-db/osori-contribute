@@ -173,29 +173,27 @@ describe('LicenseList 기여하기 흐름', () => {
     })
   })
 
-  it('SPDX Identifier가 없으면 조회를 건너뛰고 바로 생성한다', async () => {
+  it('SPDX Identifier가 없으면 저장 버튼이 비활성화된다', async () => {
     const user = userEvent.setup()
-    mockFetchCreateLicense.mockResolvedValue({ success: true, data: { id: 300, message: 'created' } })
 
     const row = makeLicenseRow({ spdxIdentifier: '' })
     render(<LicenseList rows={[row]} />)
 
-    // 모달 열기 — validation fail(licenseName은 있지만 webpage가 없을 수 있음)
-    // 여기선 webpage가 있으므로 저장 가능
+    // 모달 열기
     const buttons = screen.getAllByRole('button')
     const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
 
-    // 저장 클릭
+    // 모달에 검증 에러 메시지 표시
+    expect(screen.getByText(/SPDX Identifier는 필수 항목입니다/)).toBeInTheDocument()
+
+    // 저장 버튼이 비활성화됨
     const saveBtn = screen.getByText('저장')
-    await user.click(saveBtn)
+    expect(saveBtn).toBeDisabled()
 
-    await waitFor(() => {
-      expect(mockFetchCreateLicense).toHaveBeenCalledTimes(1)
-    })
-
-    // fetchLicenses는 호출되지 않음 (SPDX가 비어있으므로)
+    // API가 호출되지 않음
     expect(mockFetchLicenses).not.toHaveBeenCalled()
+    expect(mockFetchCreateLicense).not.toHaveBeenCalled()
   })
 
   it('취소 버튼 클릭 시 모달이 닫히고 에러가 초기화된다', async () => {

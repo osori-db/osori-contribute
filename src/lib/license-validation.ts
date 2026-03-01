@@ -21,9 +21,9 @@ export function validateLicenseRow(row: LicenseRow): FieldHints {
     addHint(hints, 'licenseName', 'fail', 'License Name은 필수 항목입니다.')
   }
 
-  // 3. SPDX Identifier 확인
+  // 3. SPDX Identifier 필수
   if (!row.spdxIdentifier?.trim()) {
-    addHint(hints, 'spdxIdentifier', 'info', 'SPDX Identifier가 비어 있으면 자동 생성됩니다.')
+    addHint(hints, 'spdxIdentifier', 'fail', 'SPDX Identifier는 필수 항목입니다.')
   }
 
   // 4. Webpage에 License text URL 입력
