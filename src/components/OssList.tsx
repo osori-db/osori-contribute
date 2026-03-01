@@ -63,9 +63,54 @@ export default function OssList({ rows }: OssListProps) {
     return rows.slice(start, start + PAGE_SIZE)
   }, [rows, currentPage])
 
-  const handleOpenModal = useCallback((index: number, row: OssRow) => {
+  const handleOpenModal = useCallback(async (index: number, row: OssRow) => {
+    if (!token) return
+
+    setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
+    try {
+      let ossMasterId: number | null = null
+
+      // 1차: purl로 조회
+      const purl = buildPurl(row.downloadLocation)
+      if (purl) {
+        const purlResult = await fetchOssList(token, '', 0, 1, true, purl)
+        if (purlResult.success && purlResult.data && purlResult.data.length > 0) {
+          ossMasterId = purlResult.data[0].oss_master_id
+        }
+      }
+
+      // 2차: purl로 못 찾았으면 downloadLocation으로 재조회
+      if (ossMasterId === null && row.downloadLocation?.trim()) {
+        const dlResult = await fetchOssList(token, row.downloadLocation.trim(), 0, 1, true)
+        if (dlResult.success && dlResult.data && dlResult.data.length > 0) {
+          ossMasterId = dlResult.data[0].oss_master_id
+        }
+      }
+
+      // OSS를 찾았으면 버전 확인
+      if (ossMasterId !== null) {
+        // 버전 필드가 없으면 OSS만 존재하면 충분
+        if (!row.version?.trim()) {
+          setStatuses((prev) => ({ ...prev, [index]: 'exists' }))
+          return
+        }
+
+        // 버전 존재 여부 확인
+        const versionsResult = await fetchOssVersions(token, ossMasterId)
+        const versionExists = versionsResult.success
+          && versionsResult.data?.some((v) => v.version === row.version?.trim())
+        if (versionExists) {
+          setStatuses((prev) => ({ ...prev, [index]: 'exists' }))
+          return
+        }
+      }
+    } catch {
+      // 조회 실패 시 모달로 진행
+    }
+
+    setStatuses((prev) => ({ ...prev, [index]: 'idle' }))
     setSelectedRow({ row, index })
-  }, [])
+  }, [token])
 
   const handleCloseModal = useCallback(() => {
     setSelectedRow(null)
@@ -176,7 +221,7 @@ export default function OssList({ rows }: OssListProps) {
               return (
                 <tr
                   key={globalIndex}
-                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                  className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${status === 'success' || status === 'exists' ? 'opacity-40' : ''}`}
                 >
                   <td className="px-3 py-2.5 text-xs text-gray-400 text-center">
                     {row.no}
