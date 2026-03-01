@@ -63,6 +63,36 @@ npm test
 npm run test:watch
 ```
 
+## 화면 가이드
+
+### 1. 로그인
+
+OSORI API 인증 토큰(JWT)을 입력하여 로그인합니다.
+
+![로그인](docs/screenshots/01-login.png)
+
+### 2. 라이선스 기여
+
+엑셀 파일을 업로드하면 라이선스 목록이 테이블로 표시됩니다. **"전체 기여"** 버튼으로 일괄 처리하거나, 각 행의 **"기여하기"** 버튼으로 개별 처리할 수 있습니다.
+
+![라이선스 테이블](docs/screenshots/02-license-table.png)
+
+개별 기여 시 모달에서 상세 정보와 검증 결과를 확인한 후 저장합니다.
+
+![라이선스 모달](docs/screenshots/03-license-modal.png)
+
+### 3. OSS 기여
+
+OSS 탭에서 엑셀을 업로드하면 OSS 목록이 표시됩니다. 라이선스와 동일하게 **"전체 기여"** 및 개별 **"기여하기"** 를 지원합니다.
+
+![OSS 테이블](docs/screenshots/04-oss-table.png)
+
+OSS 기여 모달에서는 OSS Name, Version, Download Location, 라이선스 매핑 상태 등을 확인합니다.
+
+![OSS 모달](docs/screenshots/05-oss-modal.png)
+
+---
+
 ## 주요 기능
 
 ### 1. 인증 (로그인/로그아웃)
