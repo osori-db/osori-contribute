@@ -350,3 +350,109 @@ describe('OssList 기여하기 흐름', () => {
     expect(mockFetchCreateOssVersion).not.toHaveBeenCalled()
   })
 })
+
+describe('OssList 전체 기여', () => {
+  it('전체 기여 버튼 클릭 시 모든 행을 순차 처리한다', async () => {
+    const user = userEvent.setup()
+    // 모든 행이 미존재 → OSS+버전 생성
+    mockFetchOssList.mockResolvedValue(OSS_NOT_FOUND)
+    mockFetchCreateOss.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 200, name: 'lodash', purl: 'pkg:github/lodash/lodash', reviewed: 0 },
+    })
+    mockFetchOssVersions.mockResolvedValue(VERSION_NOT_FOUND)
+    mockFetchCreateOssVersion.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 200, oss_version_id: 1, version: '4.17.21', reviewed: 0 },
+    })
+
+    const rows = [makeOssRow(), makeOssRow({ no: 2, ossName: 'axios' })]
+    render(<OssList rows={rows} />)
+
+    await user.click(screen.getByText('전체 기여'))
+
+    await waitFor(() => {
+      const badges = screen.getAllByText('완료')
+      expect(badges).toHaveLength(2)
+    })
+
+    expect(mockFetchCreateOss).toHaveBeenCalledTimes(2)
+    expect(mockFetchCreateOssVersion).toHaveBeenCalledTimes(2)
+  })
+
+  it('이미 존재하는 항목은 스킵하고 "이미 존재함" 표시', async () => {
+    const user = userEvent.setup()
+    // purl 조회 → OSS+버전 존재
+    mockFetchOssList.mockResolvedValue(OSS_FOUND)
+    mockFetchOssVersions.mockResolvedValue(VERSION_FOUND)
+
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(screen.getByText('전체 기여'))
+
+    await waitFor(() => {
+      expect(screen.getByText('이미 존재함')).toBeInTheDocument()
+    })
+
+    expect(mockFetchCreateOss).not.toHaveBeenCalled()
+    expect(mockFetchCreateOssVersion).not.toHaveBeenCalled()
+  })
+
+  it('검증 실패 행은 에러 표시하고 다음 행 진행', async () => {
+    const user = userEvent.setup()
+    // 2번째 행은 정상
+    mockFetchOssList.mockResolvedValue(OSS_NOT_FOUND)
+    mockFetchCreateOss.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 300, name: 'axios', purl: 'pkg:github/axios/axios', reviewed: 0 },
+    })
+    mockFetchOssVersions.mockResolvedValue(VERSION_NOT_FOUND)
+    mockFetchCreateOssVersion.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 300, oss_version_id: 1, version: '1.0.0', reviewed: 0 },
+    })
+
+    const rows = [
+      makeOssRow({ downloadLocation: '' }), // 검증 실패: downloadLocation 필수
+      makeOssRow({ no: 2, ossName: 'axios', downloadLocation: 'https://github.com/axios/axios', version: '1.0.0' }),
+    ]
+    render(<OssList rows={rows} />)
+
+    await user.click(screen.getByText('전체 기여'))
+
+    await waitFor(() => {
+      // 1번째 행 에러, 2번째 행 성공
+      expect(screen.getByText(/Download location은 필수 항목입니다/)).toBeInTheDocument()
+      expect(screen.getByText('완료')).toBeInTheDocument()
+    })
+  })
+
+  it('OSS 생성 실패 시 에러 표시하고 다음 행 진행', async () => {
+    const user = userEvent.setup()
+    mockFetchOssList.mockResolvedValue(OSS_NOT_FOUND)
+    mockFetchCreateOss
+      .mockResolvedValueOnce({ success: false, error: '중복된 OSS입니다.' })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { oss_master_id: 300, name: 'axios', purl: 'pkg:github/axios/axios', reviewed: 0 },
+      })
+    mockFetchOssVersions.mockResolvedValue(VERSION_NOT_FOUND)
+    mockFetchCreateOssVersion.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 300, oss_version_id: 1, version: '1.0.0', reviewed: 0 },
+    })
+
+    const rows = [
+      makeOssRow(),
+      makeOssRow({ no: 2, ossName: 'axios', downloadLocation: 'https://github.com/axios/axios', version: '1.0.0' }),
+    ]
+    render(<OssList rows={rows} />)
+
+    await user.click(screen.getByText('전체 기여'))
+
+    await waitFor(() => {
+      expect(screen.getByText('중복된 OSS입니다.')).toBeInTheDocument()
+      expect(screen.getByText('완료')).toBeInTheDocument()
+    })
+  })
+})
