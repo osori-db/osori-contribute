@@ -8,6 +8,7 @@ import { fetchCreateLicense } from '@/lib/api-client'
 import { toLicenseCreateRequest } from '@/lib/license-mapper'
 import { validateLicenseRow } from '@/lib/license-validation'
 import { hasValidationFailure } from '@/lib/oss-validation'
+import BatchResultModal from './BatchResultModal'
 import ContributeButton from './ContributeButton'
 import LicenseContributeModal from './LicenseContributeModal'
 import Pagination from './Pagination'
@@ -102,6 +103,8 @@ export default function LicenseList({ rows }: LicenseListProps) {
   const [errorMessages, setErrorMessages] = useState<Record<number, string>>({})
   const [batchSaving, setBatchSaving] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
+  const [batchDone, setBatchDone] = useState(false)
+  const [showBatchResult, setShowBatchResult] = useState(false)
 
   useEffect(() => {
     setCurrentPage(1)
@@ -164,6 +167,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
     if (!token || batchSaving) return
 
     setBatchSaving(true)
+    setBatchDone(false)
     setBatchProgress({ current: 0, total: rows.length })
     setErrorMessages({})
 
@@ -223,11 +227,21 @@ export default function LicenseList({ rows }: LicenseListProps) {
     }
 
     setBatchSaving(false)
+    setBatchDone(true)
   }, [token, rows, statuses, batchSaving, mapNamesToIds, hasLicense])
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {batchDone && !batchSaving && (
+          <button
+            type="button"
+            onClick={() => setShowBatchResult(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            기여 결과 보기
+          </button>
+        )}
         <button
           type="button"
           onClick={handleBatchContribute}
@@ -357,6 +371,14 @@ export default function LicenseList({ rows }: LicenseListProps) {
           mapNamesToIds={mapNamesToIds}
         />
       )}
+
+      <BatchResultModal
+        open={showBatchResult}
+        onClose={() => setShowBatchResult(false)}
+        rows={rows.map((r) => ({ no: r.no, name: r.licenseName }))}
+        statuses={statuses}
+        errorMessages={errorMessages}
+      />
     </div>
   )
 }
