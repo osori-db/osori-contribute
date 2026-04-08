@@ -62,6 +62,20 @@ export async function fetchLicenses(
   return apiFetch<readonly OsoriLicense[]>(`/api/osori/licenses?${params}`, token)
 }
 
+export async function fetchAllLicenses(
+  token: string,
+  page: number = 0,
+  size: number = 1000,
+): Promise<ApiResponse<readonly OsoriLicense[]>> {
+  const params = new URLSearchParams({
+    name: '',
+    page: String(page),
+    size: String(size),
+    exactMatch: 'false',
+  })
+  return apiFetch<readonly OsoriLicense[]>(`/api/osori/licenses?${params}`, token)
+}
+
 export async function fetchCreateLicense(
   token: string,
   data: Omit<OsoriLicenseCreateRequest, 'reviewed'>,

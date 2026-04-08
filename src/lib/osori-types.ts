@@ -32,6 +32,7 @@ export interface OsoriDetailResponse<T> {
 export interface OsoriLicense {
   readonly id: number
   readonly name: string
+  readonly spdx_identifier?: string | null
   readonly obligation_disclosing_src: string | null
   readonly obligation_notification: boolean | null
   readonly osi_approval: boolean | null

@@ -3,7 +3,8 @@
 import { Fragment, useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRestrictions } from '@/hooks/useRestrictions'
-import { fetchLicenses, fetchCreateLicense } from '@/lib/api-client'
+import { useLicenseMapping } from '@/hooks/useLicenseMapping'
+import { fetchCreateLicense } from '@/lib/api-client'
 import { toLicenseCreateRequest } from '@/lib/license-mapper'
 import { validateLicenseRow } from '@/lib/license-validation'
 import { hasValidationFailure } from '@/lib/oss-validation'
@@ -92,6 +93,7 @@ function parseMultiValue(value: string | null): readonly string[] {
 export default function LicenseList({ rows }: LicenseListProps) {
   const { token } = useAuth()
   const { restrictions, mapNamesToIds } = useRestrictions()
+  const { hasLicense, loading: licenseMapLoading } = useLicenseMapping()
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
   const [selectedRow, setSelectedRow] = useState<{ row: LicenseRow; index: number } | null>(null)
   const [saving, setSaving] = useState(false)
@@ -110,26 +112,17 @@ export default function LicenseList({ rows }: LicenseListProps) {
     return rows.slice(start, start + PAGE_SIZE)
   }, [rows, currentPage])
 
-  const handleOpenModal = useCallback(async (index: number, row: LicenseRow) => {
+  const handleOpenModal = useCallback((index: number, row: LicenseRow) => {
     if (!token) return
 
-    // SPDX Identifier가 있으면 먼저 존재 여부 확인
-    if (row.spdxIdentifier?.trim()) {
-      setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
-      try {
-        const searchResult = await fetchLicenses(token, '', 0, 1, true, row.spdxIdentifier)
-        if (searchResult.success && searchResult.data && searchResult.data.length > 0) {
-          setStatuses((prev) => ({ ...prev, [index]: 'exists' }))
-          return
-        }
-      } catch {
-        // 조회 실패 시 모달로 진행
-      }
-      setStatuses((prev) => ({ ...prev, [index]: 'idle' }))
+    // SPDX Identifier가 있으면 사전 로드된 맵에서 존재 여부 확인
+    if (row.spdxIdentifier?.trim() && hasLicense(row.spdxIdentifier)) {
+      setStatuses((prev) => ({ ...prev, [index]: 'exists' }))
+      return
     }
 
     setSelectedRow({ row, index })
-  }, [token])
+  }, [token, hasLicense])
 
   const handleCloseModal = useCallback(() => {
     setSelectedRow(null)
@@ -197,20 +190,17 @@ export default function LicenseList({ rows }: LicenseListProps) {
         continue
       }
 
+      // SPDX Identifier로 사전 로드된 맵에서 존재 여부 확인
+      if (row.spdxIdentifier?.trim() && hasLicense(row.spdxIdentifier)) {
+        setStatuses((prev) => ({ ...prev, [i]: 'exists' }))
+        setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
+        continue
+      }
+
       setStatuses((prev) => ({ ...prev, [i]: 'loading' }))
 
       try {
-        // 1. SPDX Identifier로 기존 라이선스 조회
-        if (row.spdxIdentifier?.trim()) {
-          const searchResult = await fetchLicenses(token, '', 0, 1, true, row.spdxIdentifier)
-          if (searchResult.success && searchResult.data && searchResult.data.length > 0) {
-            setStatuses((prev) => ({ ...prev, [i]: 'exists' }))
-            setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
-            continue
-          }
-        }
-
-        // 2. 없으면 생성
+        // 생성
         const restrictionNames = parseMultiValue(row.restriction)
         const restrictionIds = mapNamesToIds(restrictionNames)
         const request = toLicenseCreateRequest(row, restrictionIds)
@@ -233,7 +223,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
     }
 
     setBatchSaving(false)
-  }, [token, rows, statuses, batchSaving, mapNamesToIds])
+  }, [token, rows, statuses, batchSaving, mapNamesToIds, hasLicense])
 
   return (
     <div className="space-y-3">

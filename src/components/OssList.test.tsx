@@ -14,10 +14,12 @@ vi.mock('@/hooks/useAuth', () => ({
 const mockMapNamesToIds = vi.fn().mockReturnValue([1])
 vi.mock('@/hooks/useLicenseMapping', () => ({
   useLicenseMapping: () => ({
-    licenseMap: new Map([['MIT', 1]]),
+    licenses: [{ id: 1, name: 'MIT', spdx_identifier: 'MIT' }],
+    licenseMap: new Map([['MIT', 1], ['mit', 1]]),
     loading: false,
     error: null,
     mapNamesToIds: (...args: unknown[]) => mockMapNamesToIds(...args),
+    hasLicense: () => false,
   }),
 }))
 

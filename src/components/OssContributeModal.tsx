@@ -13,7 +13,7 @@ interface OssContributeModalProps {
   readonly onSave: () => void
   readonly saving: boolean
   readonly saveError?: string | null
-  readonly licenseMap: ReadonlyMap<string, number | null>
+  readonly licenseMap: ReadonlyMap<string, number>
   readonly licenseMappingLoading: boolean
 }
 

@@ -48,16 +48,7 @@ export default function OssList({ rows }: OssListProps) {
   const [batchSaving, setBatchSaving] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
 
-  const allLicenseNames = useMemo(() => {
-    const names = new Set<string>()
-    for (const row of rows) {
-      for (const name of parseMultiValue(row.declaredLicenseList)) names.add(name)
-      for (const name of parseMultiValue(row.detectedLicenseList)) names.add(name)
-    }
-    return [...names]
-  }, [rows])
-
-  const { licenseMap, loading: licenseMappingLoading, mapNamesToIds: mapLicenseNamesToIds } = useLicenseMapping(allLicenseNames)
+  const { licenseMap, loading: licenseMappingLoading, mapNamesToIds: mapLicenseNamesToIds } = useLicenseMapping()
 
   useEffect(() => {
     setCurrentPage(1)

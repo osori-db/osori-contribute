@@ -37,7 +37,7 @@ interface OsoriApiResult<T> {
 
 function extractListData<T>(response: ExternalApiResponse): OsoriApiResult<readonly T[]> {
   if (!response.success) {
-    return { success: false, error: getErrorMessage(response.code) }
+    return { success: false, error: getErrorMessage(response.code, response.messageList) }
   }
 
   const messageList = response.messageList as { list?: readonly T[] | null }
@@ -46,7 +46,7 @@ function extractListData<T>(response: ExternalApiResponse): OsoriApiResult<reado
 
 function extractDetailData<T>(response: ExternalApiResponse): OsoriApiResult<T> {
   if (!response.success) {
-    return { success: false, error: getErrorMessage(response.code) }
+    return { success: false, error: getErrorMessage(response.code, response.messageList) }
   }
 
   const messageList = response.messageList as { detailInfo?: T | null }
@@ -55,7 +55,7 @@ function extractDetailData<T>(response: ExternalApiResponse): OsoriApiResult<T> 
 
 function extractCreateData(response: ExternalApiResponse): OsoriApiResult<{ readonly id: number; readonly message: string }> {
   if (!response.success) {
-    return { success: false, error: getErrorMessage(response.code) }
+    return { success: false, error: getErrorMessage(response.code, response.messageList) }
   }
 
   const messageList = response.messageList as { id?: number; message?: string }

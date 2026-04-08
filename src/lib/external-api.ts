@@ -55,15 +55,51 @@ export async function externalFetch(
   }
 }
 
-export function getErrorMessage(code: string): string {
+export function getErrorMessage(code: string, messageList?: Record<string, unknown>): string {
+  const detail = extractDetail(messageList)
+
   switch (code) {
     case '401':
-      return '인증 정보가 유효하지 않습니다. 토큰을 확인해주세요.'
+      return appendDetail('인증 정보가 유효하지 않습니다. 토큰을 확인해주세요.', detail)
     case '403':
-      return '접근 권한이 없습니다.'
+      return appendDetail('접근 권한이 없습니다.', detail)
     case 'TIMEOUT':
       return '요청 시간이 초과되었습니다. 다시 시도해주세요.'
     default:
-      return `요청 처리에 실패했습니다. (코드: ${code})`
+      return appendDetail(`요청 처리에 실패했습니다. (코드: ${code})`, detail)
   }
+}
+
+function extractDetail(messageList?: Record<string, unknown>): string {
+  if (!messageList) return ''
+
+  // OSORI API 응답에서 에러 상세를 추출
+  const candidates = [
+    messageList.message,
+    messageList.error,
+    messageList.detailMessage,
+    messageList.errorMessage,
+  ]
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  // 위 필드가 없으면 messageList 전체를 문자열로
+  const keys = Object.keys(messageList)
+  if (keys.length === 0) return ''
+
+  try {
+    const serialized = JSON.stringify(messageList)
+    // 너무 길면 자름
+    return serialized.length > 300 ? serialized.slice(0, 300) + '…' : serialized
+  } catch {
+    return ''
+  }
+}
+
+function appendDetail(base: string, detail: string): string {
+  return detail ? `${base} — ${detail}` : base
 }

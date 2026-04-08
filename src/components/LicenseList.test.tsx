@@ -21,10 +21,20 @@ vi.mock('@/hooks/useRestrictions', () => ({
   }),
 }))
 
-const mockFetchLicenses = vi.fn()
+const mockHasLicense = vi.fn().mockReturnValue(false)
+vi.mock('@/hooks/useLicenseMapping', () => ({
+  useLicenseMapping: () => ({
+    licenses: [],
+    licenseMap: new Map(),
+    loading: false,
+    error: null,
+    mapNamesToIds: vi.fn().mockReturnValue([]),
+    hasLicense: (...args: unknown[]) => mockHasLicense(...args),
+  }),
+}))
+
 const mockFetchCreateLicense = vi.fn()
 vi.mock('@/lib/api-client', () => ({
-  fetchLicenses: (...args: unknown[]) => mockFetchLicenses(...args),
   fetchCreateLicense: (...args: unknown[]) => mockFetchCreateLicense(...args),
 }))
 
@@ -47,17 +57,17 @@ function makeLicenseRow(overrides: Partial<LicenseRow> = {}): LicenseRow {
 }
 
 beforeEach(() => {
-  mockFetchLicenses.mockReset()
   mockFetchCreateLicense.mockReset()
   mockMapNamesToIds.mockReturnValue([26])
+  mockHasLicense.mockReturnValue(false)
 })
 
 // ─── Tests ───
 
 describe('LicenseList 기여하기 흐름', () => {
-  it('기여하기 클릭 시 SPDX 조회 후 미존재하면 모달이 열린다', async () => {
+  it('기여하기 클릭 시 사전 로드된 맵에 없으면 모달이 열린다', async () => {
     const user = userEvent.setup()
-    mockFetchLicenses.mockResolvedValue({ success: true, data: [] })
+    mockHasLicense.mockReturnValue(false)
 
     render(<LicenseList rows={[makeLicenseRow()]} />)
 
@@ -71,18 +81,13 @@ describe('LicenseList 기여하기 흐름', () => {
       expect(screen.getByText('라이선스 기여하기')).toBeInTheDocument()
     })
 
-    // SPDX 조회가 호출됨
-    expect(mockFetchLicenses).toHaveBeenCalledWith(
-      mockToken, '', 0, 1, true, 'Apache-2.0',
-    )
+    // hasLicense가 SPDX로 호출됨
+    expect(mockHasLicense).toHaveBeenCalledWith('Apache-2.0')
   })
 
-  it('기여하기 클릭 시 SPDX 조회 → 이미 존재하면 모달 없이 "이미 존재함" 표시', async () => {
+  it('기여하기 클릭 시 사전 로드된 맵에 이미 존재하면 모달 없이 "이미 존재함" 표시', async () => {
     const user = userEvent.setup()
-    mockFetchLicenses.mockResolvedValue({
-      success: true,
-      data: [{ id: 100, name: 'Apache License 2.0' }],
-    })
+    mockHasLicense.mockReturnValue(true)
 
     render(<LicenseList rows={[makeLicenseRow()]} />)
 
@@ -102,14 +107,14 @@ describe('LicenseList 기여하기 흐름', () => {
     expect(mockFetchCreateLicense).not.toHaveBeenCalled()
   })
 
-  it('SPDX 조회 → 없으면 모달에서 생성 API를 호출한다', async () => {
+  it('맵에 없으면 모달에서 생성 API를 호출한다', async () => {
     const user = userEvent.setup()
-    mockFetchLicenses.mockResolvedValue({ success: true, data: [] })
+    mockHasLicense.mockReturnValue(false)
     mockFetchCreateLicense.mockResolvedValue({ success: true, data: { id: 200, message: 'created' } })
 
     render(<LicenseList rows={[makeLicenseRow()]} />)
 
-    // 기여하기 클릭 → SPDX 조회 → 미존재 → 모달 열림
+    // 기여하기 클릭 → 미존재 → 모달 열림
     const buttons = screen.getAllByRole('button')
     const contributeBtn = buttons.find((b) => b.textContent?.includes('기여하기'))
     await user.click(contributeBtn!)
@@ -135,7 +140,7 @@ describe('LicenseList 기여하기 흐름', () => {
 
   it('생성 API 실패 시 모달에 에러 메시지가 표시된다', async () => {
     const user = userEvent.setup()
-    mockFetchLicenses.mockResolvedValue({ success: true, data: [] })
+    mockHasLicense.mockReturnValue(false)
     mockFetchCreateLicense.mockResolvedValue({
       success: false,
       error: '중복된 라이선스입니다.',
@@ -167,7 +172,7 @@ describe('LicenseList 기여하기 흐름', () => {
 
   it('API 예외 발생 시 에러 메시지가 표시된다', async () => {
     const user = userEvent.setup()
-    mockFetchLicenses.mockResolvedValue({ success: true, data: [] })
+    mockHasLicense.mockReturnValue(false)
     mockFetchCreateLicense.mockRejectedValue(new Error('Network timeout'))
 
     render(<LicenseList rows={[makeLicenseRow()]} />)
@@ -209,13 +214,12 @@ describe('LicenseList 기여하기 흐름', () => {
     expect(saveBtn).toBeDisabled()
 
     // API가 호출되지 않음
-    expect(mockFetchLicenses).not.toHaveBeenCalled()
     expect(mockFetchCreateLicense).not.toHaveBeenCalled()
   })
 
   it('취소 버튼 클릭 시 모달이 닫히고 에러가 초기화된다', async () => {
     const user = userEvent.setup()
-    mockFetchLicenses.mockResolvedValue({ success: true, data: [] })
+    mockHasLicense.mockReturnValue(false)
     mockFetchCreateLicense.mockResolvedValue({ success: false, error: '실패' })
 
     render(<LicenseList rows={[makeLicenseRow()]} />)
