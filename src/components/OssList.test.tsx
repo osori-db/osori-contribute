@@ -124,9 +124,14 @@ describe('OssList 사전 조회', () => {
     })
   })
 
-  it('purl 조회 → OSS 존재 + 버전 없는 행 → "이미 존재함" 표시', async () => {
+  it('purl 조회 → OSS 존재 + 버전 없는 행 → 빈 버전 일치 시 "이미 존재함" 표시', async () => {
     const user = userEvent.setup()
     mockFetchOssList.mockResolvedValue(OSS_FOUND)
+    // 빈 버전(version: null)이 존재하는 응답
+    mockFetchOssVersions.mockResolvedValue({
+      success: true,
+      data: [{ oss_version_id: 2, oss_master_id: 100, version: null, reviewed: 0 }],
+    })
 
     const row = makeOssRow({ version: null })
     render(<OssList rows={[row]} />)
@@ -139,8 +144,7 @@ describe('OssList 사전 조회', () => {
       expect(screen.getByText('이미 존재함')).toBeInTheDocument()
     })
 
-    // 버전 필드가 없으므로 버전 조회 불필요
-    expect(mockFetchOssVersions).not.toHaveBeenCalled()
+    expect(mockFetchOssVersions).toHaveBeenCalledTimes(1)
   })
 
   it('purl 미발견 → downloadLocation 폴백 → 존재 시 "이미 존재함"', async () => {
@@ -323,12 +327,17 @@ describe('OssList 기여하기 흐름', () => {
     })
   })
 
-  it('버전이 없으면 버전 조회/생성을 건너뛴다', async () => {
+  it('버전이 빈 문자열이어도 버전 생성을 수행한다', async () => {
     const user = userEvent.setup()
     mockPreCheckNotFound()
     mockFetchCreateOss.mockResolvedValue({
       success: true,
       data: { oss_master_id: 400, name: 'lodash', purl: '', reviewed: 0 },
+    })
+    mockFetchOssVersions.mockResolvedValue(VERSION_NOT_FOUND)
+    mockFetchCreateOssVersion.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 400, oss_version_id: 1, version: null, reviewed: 0 },
     })
 
     const row = makeOssRow({ version: null })
@@ -348,8 +357,8 @@ describe('OssList 기여하기 흐름', () => {
       expect(mockFetchCreateOss).toHaveBeenCalledTimes(1)
     })
 
-    expect(mockFetchOssVersions).not.toHaveBeenCalled()
-    expect(mockFetchCreateOssVersion).not.toHaveBeenCalled()
+    expect(mockFetchOssVersions).toHaveBeenCalledTimes(1)
+    expect(mockFetchCreateOssVersion).toHaveBeenCalledTimes(1)
   })
 })
 

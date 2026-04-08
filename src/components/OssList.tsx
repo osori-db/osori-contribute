@@ -86,18 +86,12 @@ export default function OssList({ rows }: OssListProps) {
         }
       }
 
-      // OSS를 찾았으면 버전 확인
+      // OSS를 찾았으면 버전 존재 여부 확인
       if (ossMasterId !== null) {
-        // 버전 필드가 없으면 OSS만 존재하면 충분
-        if (!row.version?.trim()) {
-          setStatuses((prev) => ({ ...prev, [index]: 'exists' }))
-          return
-        }
-
-        // 버전 존재 여부 확인
+        const versionToCheck = (row.version ?? '').trim()
         const versionsResult = await fetchOssVersions(token, ossMasterId)
         const versionExists = versionsResult.success
-          && versionsResult.data?.some((v) => v.version === row.version?.trim())
+          && versionsResult.data?.some((v) => (v.version ?? '') === versionToCheck)
         if (versionExists) {
           setStatuses((prev) => ({ ...prev, [index]: 'exists' }))
           return
@@ -150,12 +144,12 @@ export default function OssList({ rows }: OssListProps) {
         ossMasterId = ossResult.data.oss_master_id
       }
 
-      // 3. 버전이 있으면 기존 버전 조회 → 없으면 생성
-      if (row.version?.trim()) {
-        // 기존 버전 조회
+      // 3. 기존 버전 조회 → 없으면 생성
+      {
+        const versionToCheck = (row.version ?? '').trim()
         const versionsResult = await fetchOssVersions(token, ossMasterId)
         const versionExists = versionsResult.success
-          && versionsResult.data?.some((v) => v.version === row.version?.trim())
+          && versionsResult.data?.some((v) => (v.version ?? '') === versionToCheck)
 
         if (!versionExists) {
           const declaredNames = parseMultiValue(row.declaredLicenseList)
@@ -238,17 +232,12 @@ export default function OssList({ rows }: OssListProps) {
           }
         }
 
-        // 3. OSS를 찾았으면 버전 확인
+        // 3. OSS를 찾았으면 버전 존재 여부 확인
         if (ossMasterId !== null) {
-          if (!row.version?.trim()) {
-            setStatuses((prev) => ({ ...prev, [i]: 'exists' }))
-            setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
-            continue
-          }
-
+          const versionToCheck = (row.version ?? '').trim()
           const versionsResult = await fetchOssVersions(token, ossMasterId)
           const versionExists = versionsResult.success
-            && versionsResult.data?.some((v) => v.version === row.version?.trim())
+            && versionsResult.data?.some((v) => (v.version ?? '') === versionToCheck)
           if (versionExists) {
             setStatuses((prev) => ({ ...prev, [i]: 'exists' }))
             setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
@@ -270,8 +259,8 @@ export default function OssList({ rows }: OssListProps) {
           ossMasterId = ossResult.data.oss_master_id
         }
 
-        // 5. 버전이 있으면 버전 생성
-        if (row.version?.trim()) {
+        // 5. 버전 생성
+        {
           const declaredNames = parseMultiValue(row.declaredLicenseList)
           const detectedNames = parseMultiValue(row.detectedLicenseList)
           const declaredIds = mapLicenseNamesToIds(declaredNames)

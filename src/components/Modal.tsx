@@ -7,10 +7,16 @@ interface ModalProps {
   readonly open: boolean
   readonly onClose: () => void
   readonly title: string
+  readonly size?: 'default' | 'wide'
   readonly children: ReactNode
 }
 
-export default function Modal({ open, onClose, title, children }: ModalProps) {
+const SIZE_CLASS = {
+  default: 'max-w-2xl',
+  wide: 'max-w-5xl',
+} as const
+
+export default function Modal({ open, onClose, title, size = 'default', children }: ModalProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -36,7 +42,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col"
+        className={`bg-white rounded-xl shadow-xl w-full ${SIZE_CLASS[size]} mx-4 max-h-[85vh] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">

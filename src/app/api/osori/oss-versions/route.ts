@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    if (!body.version || !body.oss_master_id) {
+    if (body.version === undefined || body.version === null || !body.oss_master_id) {
       return NextResponse.json(
         { success: false, error: 'version, oss_master_id는 필수 항목입니다.' },
         { status: 400 },
