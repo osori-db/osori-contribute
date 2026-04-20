@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import Modal from './Modal'
 import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
 import type { OssRow } from '@/lib/types'
@@ -86,19 +86,27 @@ export default function OssContributeModal({
   const hints = useMemo(() => validateOssRow(row), [row])
   const hasFail = useMemo(() => hasValidationFailure(hints), [hints])
 
+  const lookupLicenseId = useCallback(
+    (name: string): number | null => {
+      const trimmed = name.trim()
+      return licenseMap.get(trimmed) ?? licenseMap.get(trimmed.toLowerCase()) ?? null
+    },
+    [licenseMap],
+  )
+
   const declaredMapping = useMemo(() => {
     return declaredLicenses.map((name) => ({
       name,
-      id: licenseMap.get(name) ?? null,
+      id: lookupLicenseId(name),
     }))
-  }, [declaredLicenses, licenseMap])
+  }, [declaredLicenses, lookupLicenseId])
 
   const detectedMapping = useMemo(() => {
     return detectedLicenses.map((name) => ({
       name,
-      id: licenseMap.get(name) ?? null,
+      id: lookupLicenseId(name),
     }))
-  }, [detectedLicenses, licenseMap])
+  }, [detectedLicenses, lookupLicenseId])
 
   const unmappedLicenses = useMemo(() => {
     const all = [...declaredMapping, ...detectedMapping]
