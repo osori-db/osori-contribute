@@ -248,3 +248,94 @@ describe('LicenseList 기여하기 흐름', () => {
     })
   })
 })
+
+describe('LicenseList 수정된 행 표시', () => {
+  async function openModal(user: ReturnType<typeof userEvent.setup>) {
+    const contributeBtn = screen
+      .getAllByRole('button')
+      .find((b) => b.textContent?.includes('기여하기'))
+    await user.click(contributeBtn!)
+    await waitFor(() => {
+      expect(screen.getByText('라이선스 기여하기')).toBeInTheDocument()
+    })
+  }
+
+  it('모달에서 값을 바꿔 저장하면 해당 행에 수정됨 표시가 붙는다', async () => {
+    const user = userEvent.setup()
+    mockFetchCreateLicense.mockResolvedValue({ success: true, data: { id: 200, message: 'created' } })
+
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+    expect(screen.queryByText('수정됨')).not.toBeInTheDocument()
+
+    await openModal(user)
+    const spdx = screen.getByLabelText('SPDX Identifier')
+    await user.clear(spdx)
+    await user.type(spdx, 'MIT')
+    await user.click(screen.getByText('저장'))
+
+    await waitFor(() => {
+      expect(screen.getByText('수정됨')).toBeInTheDocument()
+    })
+    expect(screen.getByText('수정됨')).toHaveAttribute(
+      'title',
+      '수정된 항목: SPDX Identifier',
+    )
+  })
+
+  it('아무것도 바꾸지 않고 저장하면 수정됨 표시가 붙지 않는다', async () => {
+    const user = userEvent.setup()
+    mockFetchCreateLicense.mockResolvedValue({ success: true, data: { id: 200, message: 'created' } })
+
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+
+    await openModal(user)
+    await user.click(screen.getByText('저장'))
+
+    await waitFor(() => {
+      expect(screen.getByText('완료')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('수정됨')).not.toBeInTheDocument()
+  })
+
+  it('수정된 값이 생성 API 요청에 반영된다', async () => {
+    const user = userEvent.setup()
+    mockFetchCreateLicense.mockResolvedValue({ success: true, data: { id: 200, message: 'created' } })
+
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+
+    await openModal(user)
+    const webpage = screen.getByLabelText('Webpage')
+    await user.clear(webpage)
+    await user.type(webpage, 'https://opensource.org/license/mit')
+    await user.click(screen.getByText('저장'))
+
+    await waitFor(() => {
+      expect(mockFetchCreateLicense).toHaveBeenCalled()
+    })
+    expect(mockFetchCreateLicense.mock.calls[0][1]).toMatchObject({
+      webpage: 'https://opensource.org/license/mit',
+    })
+  })
+
+  it('저장에 실패해도 수정본이 유지되어 수정됨 표시가 남는다', async () => {
+    const user = userEvent.setup()
+    mockFetchCreateLicense.mockResolvedValue({ success: false, error: '실패' })
+
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+
+    await openModal(user)
+    const spdx = screen.getByLabelText('SPDX Identifier')
+    await user.clear(spdx)
+    await user.type(spdx, 'MIT')
+    await user.click(screen.getByText('저장'))
+
+    await waitFor(() => {
+      expect(screen.getByText('실패')).toBeInTheDocument()
+    })
+    await user.click(screen.getByText('취소'))
+
+    await waitFor(() => {
+      expect(screen.getByText('수정됨')).toBeInTheDocument()
+    })
+  })
+})

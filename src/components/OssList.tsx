@@ -6,8 +6,11 @@ import { useLicenseMapping } from '@/hooks/useLicenseMapping'
 import { fetchOssList, fetchOssVersions, fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
 import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
 import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
+import { changedFieldKeys } from '@/lib/row-diff'
+import { OSS_FIELD_LABELS, toFieldLabels } from '@/lib/field-labels'
 import BatchResultModal from './BatchResultModal'
 import ContributeButton from './ContributeButton'
+import EditedBadge from './EditedBadge'
 import OssContributeModal from './OssContributeModal'
 import Pagination from './Pagination'
 import type { OssRow, ContributeStatus } from '@/lib/types'
@@ -42,6 +45,8 @@ export default function OssList({ rows }: OssListProps) {
   const { token } = useAuth()
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
   const [selectedRow, setSelectedRow] = useState<{ row: OssRow; index: number } | null>(null)
+  // 모달에서 수정한 행. 표시·배치 기여가 모두 수정본을 쓰도록 원본 위에 덮어쓴다.
+  const [rowOverrides, setRowOverrides] = useState<Record<number, OssRow>>({})
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -55,12 +60,33 @@ export default function OssList({ rows }: OssListProps) {
 
   useEffect(() => {
     setCurrentPage(1)
+    setRowOverrides({})
   }, [rows])
+
+  const effectiveRows = useMemo(
+    () => rows.map((row, i) => rowOverrides[i] ?? row),
+    [rows, rowOverrides],
+  )
 
   const pagedRows = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
-    return rows.slice(start, start + PAGE_SIZE)
-  }, [rows, currentPage])
+    return effectiveRows.slice(start, start + PAGE_SIZE)
+  }, [effectiveRows, currentPage])
+
+  // 실제로 값이 달라진 행만 "수정됨"으로 표시한다.
+  const editedFields = useMemo(() => {
+    const result: Record<number, readonly string[]> = {}
+    for (const [key, override] of Object.entries(rowOverrides)) {
+      const index = Number(key)
+      const original = rows[index]
+      if (!original) continue
+      const changed = changedFieldKeys(original, override)
+      if (changed.length > 0) {
+        result[index] = toFieldLabels(changed, OSS_FIELD_LABELS)
+      }
+    }
+    return result
+  }, [rowOverrides, rows])
 
   const handleOpenModal = useCallback(async (index: number, row: OssRow) => {
     if (!token) return
@@ -110,10 +136,13 @@ export default function OssList({ rows }: OssListProps) {
     setSaveError(null)
   }, [])
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (editedRow: OssRow) => {
     if (!token || !selectedRow) return
 
-    const { row, index } = selectedRow
+    const { index } = selectedRow
+    const row = editedRow
+    // 저장 시도 시점에 수정본을 확정한다 — 실패해도 표와 배치 기여가 수정본을 쓰게 된다.
+    setRowOverrides((prev) => ({ ...prev, [index]: editedRow }))
     setSaving(true)
     setSaveError(null)
     setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
@@ -184,11 +213,11 @@ export default function OssList({ rows }: OssListProps) {
 
     setBatchSaving(true)
     setBatchDone(false)
-    setBatchProgress({ current: 0, total: rows.length })
+    setBatchProgress({ current: 0, total: effectiveRows.length })
     setErrorMessages({})
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]
+    for (let i = 0; i < effectiveRows.length; i++) {
+      const row = effectiveRows[i]
       const currentStatus = statuses[i]
 
       // 이미 성공했거나 존재하는 항목은 스킵
@@ -289,7 +318,7 @@ export default function OssList({ rows }: OssListProps) {
 
     setBatchSaving(false)
     setBatchDone(true)
-  }, [token, rows, statuses, batchSaving, mapLicenseNamesToIds])
+  }, [token, effectiveRows, statuses, batchSaving, mapLicenseNamesToIds])
 
   return (
     <div className="space-y-3">
@@ -306,7 +335,7 @@ export default function OssList({ rows }: OssListProps) {
         <button
           type="button"
           onClick={handleBatchContribute}
-          disabled={batchSaving || rows.length === 0}
+          disabled={batchSaving || effectiveRows.length === 0}
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {batchSaving ? (
@@ -354,17 +383,21 @@ export default function OssList({ rows }: OssListProps) {
               const globalIndex = (currentPage - 1) * PAGE_SIZE + i
               const status = statuses[globalIndex] ?? 'idle'
               const errorMsg = errorMessages[globalIndex]
+              const edited = editedFields[globalIndex]
               return (
                 <Fragment key={globalIndex}>
                   <tr
-                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${status === 'success' || status === 'exists' ? 'opacity-40' : ''}`}
+                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${edited ? 'bg-amber-50/50' : ''} ${status === 'success' || status === 'exists' ? 'opacity-40' : ''}`}
                   >
                     <td className="px-3 py-2.5 text-xs text-gray-400 text-center">
                       {row.no}
                     </td>
                     <td className="px-3 py-2.5 text-sm text-gray-900 font-medium">
-                      <div className="truncate" title={row.ossName}>
-                        {row.ossName}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate" title={row.ossName}>
+                          {row.ossName}
+                        </span>
+                        {edited && <EditedBadge fields={edited} />}
                       </div>
                       {row.nickname && (
                         <div className="text-xs text-gray-400 truncate mt-0.5" title={row.nickname}>
@@ -423,7 +456,7 @@ export default function OssList({ rows }: OssListProps) {
       </div>
 
       <Pagination
-        totalCount={rows.length}
+        totalCount={effectiveRows.length}
         currentPage={currentPage}
         pageSize={PAGE_SIZE}
         onPageChange={setCurrentPage}
@@ -445,7 +478,7 @@ export default function OssList({ rows }: OssListProps) {
       <BatchResultModal
         open={showBatchResult}
         onClose={() => setShowBatchResult(false)}
-        rows={rows.map((r) => ({ no: r.no, name: r.ossName }))}
+        rows={effectiveRows.map((r) => ({ no: r.no, name: r.ossName }))}
         statuses={statuses}
         errorMessages={errorMessages}
       />

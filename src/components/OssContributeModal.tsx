@@ -1,28 +1,26 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Modal from './Modal'
+import { TextAreaField, TextField } from './FormField'
 import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
+import { parseMultiValue } from '@/lib/multi-value'
 import type { OssRow } from '@/lib/types'
-import type { FieldHint, FieldHints } from '@/lib/oss-validation'
 
 interface OssContributeModalProps {
   readonly open: boolean
   readonly onClose: () => void
   readonly row: OssRow
-  readonly onSave: () => void
+  readonly onSave: (row: OssRow) => void
   readonly saving: boolean
   readonly saveError?: string | null
   readonly licenseMap: ReadonlyMap<string, number>
   readonly licenseMappingLoading: boolean
 }
 
-const FIELD_LABEL = 'block text-xs font-medium text-gray-500 mb-1'
-const FIELD_VALUE = 'text-sm text-gray-900'
-
-function parseMultiValue(value: string | null): readonly string[] {
-  if (!value) return []
-  return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
+/** 빈 입력은 null로 되돌린다 — 원본 타입이 `string | null`인 필드의 의미를 유지하기 위함이다. */
+function nullify(value: string): string | null {
+  return value.trim() === '' ? null : value
 }
 
 function LicenseBadgeWithMapping({
@@ -48,27 +46,6 @@ function LicenseBadgeWithMapping({
   )
 }
 
-const HINT_COLORS: Record<FieldHint['status'], string> = {
-  fail: 'text-red-500',
-  warn: 'text-amber-600',
-  info: 'text-blue-500',
-}
-
-function FieldHintsView({ hints, field }: { readonly hints: FieldHints; readonly field: string }) {
-  const fieldHints = hints[field]
-  if (!fieldHints || fieldHints.length === 0) return null
-
-  return (
-    <div className="mt-1 space-y-0.5">
-      {fieldHints.map((hint, i) => (
-        <p key={i} className={`text-xs ${HINT_COLORS[hint.status]}`}>
-          * {hint.message}
-        </p>
-      ))}
-    </div>
-  )
-}
-
 export default function OssContributeModal({
   open,
   onClose,
@@ -79,11 +56,20 @@ export default function OssContributeModal({
   licenseMap,
   licenseMappingLoading,
 }: OssContributeModalProps) {
-  const declaredLicenses = parseMultiValue(row.declaredLicenseList)
-  const detectedLicenses = parseMultiValue(row.detectedLicenseList)
-  const downloadLocations = parseMultiValue(row.downloadLocationList)
+  const [draft, setDraft] = useState<OssRow>(row)
+  const [showExtra, setShowExtra] = useState(false)
 
-  const hints = useMemo(() => validateOssRow(row), [row])
+  // 다른 행이 선택되면 초안을 새 원본으로 되돌린다.
+  useEffect(() => {
+    setDraft(row)
+  }, [row])
+
+  const declaredLicenses = parseMultiValue(draft.declaredLicenseList)
+  const detectedLicenses = parseMultiValue(draft.detectedLicenseList)
+  const downloadLocations = parseMultiValue(draft.downloadLocationList)
+
+  // 검증은 원본이 아니라 초안 기준이다 — 사용자가 고치면 즉시 반영되어야 한다.
+  const hints = useMemo(() => validateOssRow(draft), [draft])
   const hasFail = useMemo(() => hasValidationFailure(hints), [hints])
 
   const lookupLicenseId = useCallback(
@@ -94,79 +80,129 @@ export default function OssContributeModal({
     [licenseMap],
   )
 
-  const declaredMapping = useMemo(() => {
-    return declaredLicenses.map((name) => ({
-      name,
-      id: lookupLicenseId(name),
-    }))
-  }, [declaredLicenses, lookupLicenseId])
+  const declaredMapping = useMemo(
+    () => declaredLicenses.map((name) => ({ name, id: lookupLicenseId(name) })),
+    [declaredLicenses, lookupLicenseId],
+  )
 
-  const detectedMapping = useMemo(() => {
-    return detectedLicenses.map((name) => ({
-      name,
-      id: lookupLicenseId(name),
-    }))
-  }, [detectedLicenses, lookupLicenseId])
+  const detectedMapping = useMemo(
+    () => detectedLicenses.map((name) => ({ name, id: lookupLicenseId(name) })),
+    [detectedLicenses, lookupLicenseId],
+  )
 
-  const unmappedLicenses = useMemo(() => {
-    const all = [...declaredMapping, ...detectedMapping]
-    return all.filter((l) => l.id === null)
-  }, [declaredMapping, detectedMapping])
+  const unmappedLicenses = useMemo(
+    () => [...declaredMapping, ...detectedMapping].filter((l) => l.id === null),
+    [declaredMapping, detectedMapping],
+  )
+
+  const handleSave = useCallback(() => {
+    onSave(draft)
+  }, [onSave, draft])
+
+  const handleReset = useCallback(() => {
+    setDraft(row)
+  }, [row])
 
   return (
     <Modal open={open} onClose={onClose} title="OSS 기여하기">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={FIELD_LABEL}>OSS Name</label>
-            <p className={FIELD_VALUE}>{row.ossName}</p>
-          </div>
-          <div>
-            <label className={FIELD_LABEL}>Version</label>
-            <p className={FIELD_VALUE}>{row.version || '-'}</p>
-            <FieldHintsView hints={hints} field="version" />
-          </div>
+          <TextField
+            id="oss-name"
+            label="OSS Name"
+            value={draft.ossName}
+            disabled={saving}
+            onChange={(v) => setDraft((p) => ({ ...p, ossName: v }))}
+          />
+          <TextField
+            id="oss-version"
+            label="Version"
+            value={draft.version ?? ''}
+            disabled={saving}
+            hints={hints}
+            hintField="version"
+            onChange={(v) => setDraft((p) => ({ ...p, version: nullify(v) }))}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={FIELD_LABEL}>Nickname</label>
-            <p className={FIELD_VALUE}>{row.nickname || '-'}</p>
-          </div>
-          <div>
-            <label className={FIELD_LABEL}>Publisher</label>
-            <p className={FIELD_VALUE}>{row.publisher || '-'}</p>
-          </div>
+          <TextField
+            id="oss-nickname"
+            label="Nickname"
+            value={draft.nickname ?? ''}
+            disabled={saving}
+            help="쉼표 또는 줄바꿈으로 구분"
+            onChange={(v) => setDraft((p) => ({ ...p, nickname: nullify(v) }))}
+          />
+          <TextField
+            id="oss-publisher"
+            label="Publisher"
+            value={draft.publisher ?? ''}
+            disabled={saving}
+            onChange={(v) => setDraft((p) => ({ ...p, publisher: nullify(v) }))}
+          />
         </div>
 
-        <div>
-          <label className={FIELD_LABEL}>Homepage</label>
-          <p className="text-sm text-gray-900 break-all">{row.homepage || '-'}</p>
-        </div>
+        <TextField
+          id="oss-homepage"
+          label="Homepage"
+          value={draft.homepage ?? ''}
+          disabled={saving}
+          onChange={(v) => setDraft((p) => ({ ...p, homepage: nullify(v) }))}
+        />
 
         <div>
-          <label className={FIELD_LABEL}>Download Location</label>
-          <p className="text-sm text-gray-900 break-all">{row.downloadLocation || '-'}</p>
+          <TextField
+            id="oss-download-location"
+            label="Download Location"
+            value={draft.downloadLocation}
+            disabled={saving}
+            hints={hints}
+            hintField="downloadLocation"
+            onChange={(v) => setDraft((p) => ({ ...p, downloadLocation: v }))}
+          />
           {downloadLocations.length > 0 && (
             <div className="mt-1 space-y-0.5">
+              <p className="text-[11px] text-gray-400">시트의 다른 후보 URL</p>
               {downloadLocations.map((url, i) => (
-                <p key={i} className="text-xs text-gray-400 break-all">{url}</p>
+                <button
+                  key={i}
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setDraft((p) => ({ ...p, downloadLocation: url }))}
+                  className="block text-xs text-gray-400 hover:text-olive-600 break-all text-left disabled:cursor-not-allowed"
+                >
+                  {url}
+                </button>
               ))}
             </div>
           )}
-          <FieldHintsView hints={hints} field="downloadLocation" />
         </div>
 
-        <div>
-          <label className={FIELD_LABEL}>License Combination</label>
-          <p className={FIELD_VALUE}>{row.licenseCombination || '-'}</p>
-          <FieldHintsView hints={hints} field="licenseCombination" />
-        </div>
+        <TextField
+          id="oss-license-combination"
+          label="License Combination"
+          value={draft.licenseCombination ?? ''}
+          disabled={saving}
+          placeholder="AND 또는 OR"
+          hints={hints}
+          hintField="licenseCombination"
+          onChange={(v) => setDraft((p) => ({ ...p, licenseCombination: nullify(v) }))}
+        />
 
         <div>
-          <label className={FIELD_LABEL}>Declared License</label>
-          {declaredMapping.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 mt-1">
+          <TextAreaField
+            id="oss-declared-license"
+            label="Declared License"
+            value={draft.declaredLicenseList ?? ''}
+            disabled={saving}
+            help="쉼표 또는 줄바꿈으로 구분"
+            hints={hints}
+            hintField="declaredLicense"
+            onChange={(v) => setDraft((p) => ({ ...p, declaredLicenseList: nullify(v) }))}
+          />
+          {declaredMapping.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
               {declaredMapping.map((item, i) => (
                 <LicenseBadgeWithMapping
                   key={i}
@@ -176,16 +212,22 @@ export default function OssContributeModal({
                 />
               ))}
             </div>
-          ) : (
-            <p className="text-sm text-gray-400">-</p>
           )}
-          <FieldHintsView hints={hints} field="declaredLicense" />
         </div>
 
         <div>
-          <label className={FIELD_LABEL}>Detected License</label>
-          {detectedMapping.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 mt-1">
+          <TextAreaField
+            id="oss-detected-license"
+            label="Detected License"
+            value={draft.detectedLicenseList ?? ''}
+            disabled={saving}
+            help="쉼표 또는 줄바꿈으로 구분"
+            hints={hints}
+            hintField="detectedLicense"
+            onChange={(v) => setDraft((p) => ({ ...p, detectedLicenseList: nullify(v) }))}
+          />
+          {detectedMapping.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
               {detectedMapping.map((item, i) => (
                 <LicenseBadgeWithMapping
                   key={i}
@@ -195,10 +237,7 @@ export default function OssContributeModal({
                 />
               ))}
             </div>
-          ) : (
-            <p className="text-sm text-gray-400">-</p>
           )}
-          <FieldHintsView hints={hints} field="detectedLicense" />
         </div>
 
         {!licenseMappingLoading && unmappedLicenses.length > 0 && (
@@ -207,18 +246,75 @@ export default function OssContributeModal({
           </p>
         )}
 
-        <div>
-          <label className={FIELD_LABEL}>Copyright</label>
-          <p className={FIELD_VALUE}>{row.copyright || '-'}</p>
-          <FieldHintsView hints={hints} field="copyright" />
-        </div>
+        <TextAreaField
+          id="oss-copyright"
+          label="Copyright"
+          value={draft.copyright ?? ''}
+          disabled={saving}
+          hints={hints}
+          hintField="copyright"
+          onChange={(v) => setDraft((p) => ({ ...p, copyright: nullify(v) }))}
+        />
 
-        {row.descriptionKo && (
-          <div>
-            <label className={FIELD_LABEL}>Description</label>
-            <p className={FIELD_VALUE}>{row.descriptionKo}</p>
-          </div>
-        )}
+        <TextAreaField
+          id="oss-description-ko"
+          label="Description (KO)"
+          value={draft.descriptionKo ?? ''}
+          disabled={saving}
+          onChange={(v) => setDraft((p) => ({ ...p, descriptionKo: nullify(v) }))}
+        />
+
+        <div className="border-t border-gray-100 pt-3">
+          <button
+            type="button"
+            onClick={() => setShowExtra((v) => !v)}
+            className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+            aria-expanded={showExtra}
+          >
+            {showExtra ? '− ' : '+ '}추가 정보 (OSORI로 함께 전송됨)
+          </button>
+
+          {showExtra && (
+            <div className="mt-3 space-y-4">
+              <TextAreaField
+                id="oss-description"
+                label="Description"
+                value={draft.description ?? ''}
+                disabled={saving}
+                onChange={(v) => setDraft((p) => ({ ...p, description: nullify(v) }))}
+              />
+              <TextAreaField
+                id="oss-attribution"
+                label="Attribution"
+                value={draft.attribution ?? ''}
+                disabled={saving}
+                onChange={(v) => setDraft((p) => ({ ...p, attribution: nullify(v) }))}
+              />
+              <TextAreaField
+                id="oss-compliance-notice"
+                label="Compliance Notice"
+                value={draft.complianceNotice ?? ''}
+                disabled={saving}
+                onChange={(v) => setDraft((p) => ({ ...p, complianceNotice: nullify(v) }))}
+              />
+              <TextAreaField
+                id="oss-compliance-notice-ko"
+                label="Compliance Notice (KO)"
+                value={draft.complianceNoticeKo ?? ''}
+                disabled={saving}
+                onChange={(v) => setDraft((p) => ({ ...p, complianceNoticeKo: nullify(v) }))}
+              />
+              <TextField
+                id="oss-release-date"
+                label="Release Date"
+                value={draft.releaseDate ?? ''}
+                disabled={saving}
+                placeholder="YYYY-MM-DD"
+                onChange={(v) => setDraft((p) => ({ ...p, releaseDate: nullify(v) }))}
+              />
+            </div>
+          )}
+        </div>
 
         {saveError && (
           <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
@@ -226,28 +322,36 @@ export default function OssContributeModal({
           </div>
         )}
 
-        <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+        <div className="flex justify-between items-center gap-2 pt-4 border-t border-gray-100">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleReset}
             disabled={saving}
-            className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 transition-colors"
           >
-            취소
+            원래대로
           </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving || hasFail || licenseMappingLoading}
-            className="px-4 py-2 text-sm rounded-lg bg-olive-500 text-white hover:bg-olive-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {saving ? '처리 중...' : licenseMappingLoading ? '매핑 중...' : '저장'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || hasFail || licenseMappingLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-olive-500 text-white hover:bg-olive-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? '처리 중...' : licenseMappingLoading ? '매핑 중...' : '저장'}
+            </button>
+          </div>
         </div>
         {hasFail && (
-          <p className="text-xs text-red-500 text-right">
-            필수 항목을 확인해주세요.
-          </p>
+          <p className="text-xs text-red-500 text-right">필수 항목을 확인해주세요.</p>
         )}
       </div>
     </Modal>

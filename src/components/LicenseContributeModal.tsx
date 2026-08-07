@@ -1,26 +1,24 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Modal from './Modal'
+import { CheckboxField, TextAreaField, TextField } from './FormField'
 import { validateLicenseRow } from '@/lib/license-validation'
 import { hasValidationFailure } from '@/lib/oss-validation'
+import { parseMultiValue } from '@/lib/multi-value'
 import type { LicenseRow } from '@/lib/types'
-import type { FieldHint, FieldHints } from '@/lib/oss-validation'
 import type { OsoriRestriction } from '@/lib/osori-types'
 
 interface LicenseContributeModalProps {
   readonly open: boolean
   readonly onClose: () => void
   readonly row: LicenseRow
-  readonly onSave: () => void
+  readonly onSave: (row: LicenseRow) => void
   readonly saving: boolean
   readonly saveError?: string | null
   readonly restrictions: readonly OsoriRestriction[]
   readonly mapNamesToIds: (names: readonly string[]) => readonly number[]
 }
-
-const FIELD_LABEL = 'block text-xs font-medium text-gray-500 mb-1'
-const FIELD_VALUE = 'text-sm text-gray-900'
 
 const RESTRICTION_COLORS: Record<string, string> = {
   'Network Triggered': 'bg-amber-50 text-amber-700 border-amber-200',
@@ -28,30 +26,9 @@ const RESTRICTION_COLORS: Record<string, string> = {
   'Internal Use Only': 'bg-purple-50 text-purple-700 border-purple-200',
 }
 
-function parseMultiValue(value: string | null): readonly string[] {
-  if (!value) return []
-  return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
-}
-
-const HINT_COLORS: Record<FieldHint['status'], string> = {
-  fail: 'text-red-500',
-  warn: 'text-amber-600',
-  info: 'text-blue-500',
-}
-
-function FieldHintsView({ hints, field }: { readonly hints: FieldHints; readonly field: string }) {
-  const fieldHints = hints[field]
-  if (!fieldHints || fieldHints.length === 0) return null
-
-  return (
-    <div className="mt-1 space-y-0.5">
-      {fieldHints.map((hint, i) => (
-        <p key={i} className={`text-xs ${HINT_COLORS[hint.status]}`}>
-          * {hint.message}
-        </p>
-      ))}
-    </div>
-  )
+/** 빈 입력은 null로 되돌린다 — 원본 타입이 `string | null`인 필드의 의미를 유지하기 위함이다. */
+function nullify(value: string): string | null {
+  return value.trim() === '' ? null : value
 }
 
 export default function LicenseContributeModal({
@@ -64,10 +41,17 @@ export default function LicenseContributeModal({
   restrictions: osoriRestrictions,
   mapNamesToIds,
 }: LicenseContributeModalProps) {
-  const restrictionNames = parseMultiValue(row.restriction)
-  const webpageListUrls = parseMultiValue(row.webpageList)
+  const [draft, setDraft] = useState<LicenseRow>(row)
 
-  const hints = useMemo(() => validateLicenseRow(row), [row])
+  // 다른 행이 선택되면 초안을 새 원본으로 되돌린다.
+  useEffect(() => {
+    setDraft(row)
+  }, [row])
+
+  const restrictionNames = parseMultiValue(draft.restriction)
+
+  // 검증은 원본이 아니라 초안 기준이다 — 사용자가 고치면 즉시 반영되어야 한다.
+  const hints = useMemo(() => validateLicenseRow(draft), [draft])
   const hasFail = useMemo(() => hasValidationFailure(hints), [hints])
 
   const restrictionMapping = useMemo(() => {
@@ -84,60 +68,103 @@ export default function LicenseContributeModal({
 
   const unmappedRestrictions = restrictionMapping.filter((r) => r.id === null)
 
+  const availableRestrictions = useMemo(
+    () =>
+      osoriRestrictions.filter(
+        (r) => !restrictionNames.some((n) => n.toLowerCase().trim() === r.name.toLowerCase().trim()),
+      ),
+    [osoriRestrictions, restrictionNames],
+  )
+
+  const addRestriction = useCallback((name: string) => {
+    setDraft((p) => ({
+      ...p,
+      restriction: p.restriction?.trim() ? `${p.restriction}, ${name}` : name,
+    }))
+  }, [])
+
+  const handleSave = useCallback(() => {
+    onSave(draft)
+  }, [onSave, draft])
+
+  const handleReset = useCallback(() => {
+    setDraft(row)
+  }, [row])
+
   return (
     <Modal open={open} onClose={onClose} title="라이선스 기여하기">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={FIELD_LABEL}>License Name</label>
-            <p className={FIELD_VALUE}>{row.licenseName || '-'}</p>
-            <FieldHintsView hints={hints} field="licenseName" />
-          </div>
-          <div>
-            <label className={FIELD_LABEL}>SPDX Identifier</label>
-            <p className={FIELD_VALUE}>{row.spdxIdentifier || '-'}</p>
-            <FieldHintsView hints={hints} field="spdxIdentifier" />
-          </div>
+          <TextField
+            id="license-name"
+            label="License Name"
+            value={draft.licenseName}
+            disabled={saving}
+            hints={hints}
+            hintField="licenseName"
+            onChange={(v) => setDraft((p) => ({ ...p, licenseName: v }))}
+          />
+          <TextField
+            id="license-spdx"
+            label="SPDX Identifier"
+            value={draft.spdxIdentifier}
+            disabled={saving}
+            hints={hints}
+            hintField="spdxIdentifier"
+            onChange={(v) => setDraft((p) => ({ ...p, spdxIdentifier: v }))}
+          />
         </div>
 
-        {row.nickName && (
-          <div>
-            <label className={FIELD_LABEL}>Nick Name</label>
-            <p className={FIELD_VALUE}>{row.nickName.replace(/\r?\n/g, ', ')}</p>
-          </div>
-        )}
+        <TextAreaField
+          id="license-nickname"
+          label="Nick Name"
+          value={draft.nickName ?? ''}
+          disabled={saving}
+          help="쉼표 또는 줄바꿈으로 구분"
+          onChange={(v) => setDraft((p) => ({ ...p, nickName: nullify(v) }))}
+        />
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={FIELD_LABEL}>Obligation Notice</label>
-            <p className={FIELD_VALUE}>
-              {row.obligationNotice ? (
-                <span className="inline-flex items-center gap-1 text-olive-600">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Yes
-                </span>
-              ) : (
-                <span className="text-gray-400">No</span>
-              )}
-            </p>
-          </div>
-          <div>
-            <label className={FIELD_LABEL}>Obligation Disclosing Src</label>
-            <p className={FIELD_VALUE}>{row.obligationDisclosingSrc}</p>
-            <FieldHintsView hints={hints} field="obligationDisclosingSrc" />
-          </div>
+          <CheckboxField
+            id="license-obligation-notice"
+            label="Obligation Notice"
+            checked={draft.obligationNotice}
+            disabled={saving}
+            onChange={(checked) => setDraft((p) => ({ ...p, obligationNotice: checked }))}
+          />
+          <TextField
+            id="license-obligation-disclosing-src"
+            label="Obligation Disclosing Src"
+            value={draft.obligationDisclosingSrc}
+            disabled={saving}
+            hints={hints}
+            hintField="obligationDisclosingSrc"
+            onChange={(v) => setDraft((p) => ({ ...p, obligationDisclosingSrc: v }))}
+          />
         </div>
 
         <div>
-          <label className={FIELD_LABEL}>Restriction</label>
-          {restrictionMapping.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 mt-1">
+          <TextAreaField
+            id="license-restriction"
+            label="Restriction"
+            value={draft.restriction ?? ''}
+            disabled={saving}
+            help="쉼표 또는 줄바꿈으로 구분"
+            hints={hints}
+            hintField="restriction"
+            onChange={(v) => setDraft((p) => ({ ...p, restriction: nullify(v) }))}
+          />
+
+          {restrictionMapping.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
               {restrictionMapping.map((item, i) => {
-                const color = RESTRICTION_COLORS[item.name] ?? 'bg-gray-50 text-gray-600 border-gray-200'
+                const color =
+                  RESTRICTION_COLORS[item.name] ?? 'bg-gray-50 text-gray-600 border-gray-200'
                 return (
-                  <span key={i} className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border ${color}`}>
+                  <span
+                    key={i}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border ${color}`}
+                  >
                     {item.name}
                     {item.id !== null ? (
                       <span className="text-[10px] opacity-60">#{item.id}</span>
@@ -148,36 +175,60 @@ export default function LicenseContributeModal({
                 )
               })}
             </div>
-          ) : (
-            <p className="text-sm text-gray-400">-</p>
           )}
+
           {unmappedRestrictions.length > 0 && (
             <p className="mt-1 text-xs text-amber-600">
               * 매핑되지 않은 Restriction: {unmappedRestrictions.map((r) => r.name).join(', ')}
             </p>
           )}
-          <FieldHintsView hints={hints} field="restriction" />
-        </div>
 
-        <div>
-          <label className={FIELD_LABEL}>Webpage</label>
-          <p className={FIELD_VALUE}>{row.webpage || '-'}</p>
-          {webpageListUrls.length > 0 && (
-            <div className="mt-1 space-y-0.5">
-              {webpageListUrls.map((url, i) => (
-                <p key={i} className="text-xs text-gray-400">{url}</p>
-              ))}
+          {availableRestrictions.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[11px] text-gray-400 mb-1">추가 가능한 Restriction</p>
+              <div className="flex flex-wrap gap-1.5">
+                {availableRestrictions.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => addRestriction(r.name)}
+                    className="px-2 py-0.5 text-xs rounded border border-dashed border-gray-300 text-gray-500 hover:border-olive-400 hover:text-olive-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    + {r.name}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
-          <FieldHintsView hints={hints} field="webpage" />
         </div>
 
-        {row.descriptionKo && (
-          <div>
-            <label className={FIELD_LABEL}>Description</label>
-            <p className={FIELD_VALUE}>{row.descriptionKo}</p>
-          </div>
-        )}
+        <TextField
+          id="license-webpage"
+          label="Webpage"
+          value={draft.webpage}
+          disabled={saving}
+          hints={hints}
+          hintField="webpage"
+          onChange={(v) => setDraft((p) => ({ ...p, webpage: v }))}
+        />
+
+        <TextAreaField
+          id="license-webpage-list"
+          label="Webpage List"
+          value={draft.webpageList ?? ''}
+          disabled={saving}
+          help="쉼표 또는 줄바꿈으로 구분"
+          onChange={(v) => setDraft((p) => ({ ...p, webpageList: nullify(v) }))}
+        />
+
+        <TextAreaField
+          id="license-description-ko"
+          label="Description (KO)"
+          value={draft.descriptionKo ?? ''}
+          disabled={saving}
+          onChange={(v) => setDraft((p) => ({ ...p, descriptionKo: nullify(v) }))}
+        />
 
         {saveError && (
           <div className="p-3 rounded-lg bg-red-50 border border-red-200">
@@ -185,28 +236,36 @@ export default function LicenseContributeModal({
           </div>
         )}
 
-        <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+        <div className="flex justify-between items-center gap-2 pt-4 border-t border-gray-100">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleReset}
             disabled={saving}
-            className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 transition-colors"
           >
-            취소
+            원래대로
           </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving || hasFail}
-            className="px-4 py-2 text-sm rounded-lg bg-olive-500 text-white hover:bg-olive-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {saving ? '처리 중...' : '저장'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || hasFail}
+              className="px-4 py-2 text-sm rounded-lg bg-olive-500 text-white hover:bg-olive-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? '처리 중...' : '저장'}
+            </button>
+          </div>
         </div>
         {hasFail && (
-          <p className="text-xs text-red-500 text-right">
-            필수 항목을 확인해주세요.
-          </p>
+          <p className="text-xs text-red-500 text-right">필수 항목을 확인해주세요.</p>
         )}
       </div>
     </Modal>
