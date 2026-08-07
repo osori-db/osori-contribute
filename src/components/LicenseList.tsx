@@ -18,6 +18,7 @@ import ContributeButton from './ContributeButton'
 import EditedBadge from './EditedBadge'
 import LicenseContributeModal from './LicenseContributeModal'
 import SearchInput from './SearchInput'
+import UrlLink from './UrlLink'
 import Pagination from './Pagination'
 import type { LicenseRow, ContributeStatus } from '@/lib/types'
 
@@ -81,14 +82,19 @@ function WebpageCell({ webpage, webpageList }: { readonly webpage: string; reado
   return (
     <div className="flex flex-col gap-0.5">
       {webpage && (
-        <span className="truncate block text-xs text-gray-600" title={webpage}>
-          {webpage}
-        </span>
+        <UrlLink
+          url={webpage}
+          className="truncate block text-xs text-gray-600"
+          linkClassName="truncate block text-xs text-olive-600 hover:text-olive-700 hover:underline"
+        />
       )}
       {extraUrls.map((url, i) => (
-        <span key={i} className="truncate block text-xs text-gray-400" title={url}>
-          {url}
-        </span>
+        <UrlLink
+          key={i}
+          url={url}
+          className="truncate block text-xs text-gray-400"
+          linkClassName="truncate block text-xs text-gray-400 hover:text-olive-600 hover:underline"
+        />
       ))}
     </div>
   )

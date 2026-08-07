@@ -9,7 +9,6 @@ import { usePageSizeParam, PAGE_SIZE_OPTIONS } from '@/hooks/usePageSizeParam'
 import { fetchOssList, fetchOssVersions, fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
 import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
 import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
-import { isSafeHttpUrl } from '@/lib/url'
 import { changedFieldKeys } from '@/lib/row-diff'
 import { OSS_FIELD_LABELS, toFieldLabels } from '@/lib/field-labels'
 import BatchResultModal from './BatchResultModal'
@@ -17,6 +16,7 @@ import ContributeButton from './ContributeButton'
 import EditedBadge from './EditedBadge'
 import OssContributeModal from './OssContributeModal'
 import SearchInput from './SearchInput'
+import UrlLink from './UrlLink'
 import Pagination from './Pagination'
 import type { OssRow, ContributeStatus } from '@/lib/types'
 
@@ -450,41 +450,25 @@ export default function OssList({ rows }: OssListProps) {
                       )}
                     </td>
                     <td className={`px-3 py-2.5 text-xs text-gray-600 ${dim}`}>
-                      {isSafeHttpUrl(row.downloadLocation) ? (
-                        <a
-                          href={row.downloadLocation}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="truncate block text-olive-600 hover:text-olive-700 hover:underline"
-                          title={row.downloadLocation}
-                        >
-                          {row.downloadLocation}
-                        </a>
+                      {row.downloadLocation ? (
+                        <UrlLink
+                          url={row.downloadLocation}
+                          className="truncate block"
+                          linkClassName="truncate block text-olive-600 hover:text-olive-700 hover:underline"
+                        />
                       ) : (
-                        <span className="truncate block" title={row.downloadLocation}>
-                          {row.downloadLocation || '-'}
-                        </span>
+                        <span className="text-gray-300">-</span>
                       )}
                       {row.homepage && (
                         <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
                           <span className="shrink-0 inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700">
                             Homepage
                           </span>
-                          {isSafeHttpUrl(row.homepage) ? (
-                            <a
-                              href={row.homepage ?? undefined}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-gray-400 truncate hover:text-olive-600 hover:underline"
-                              title={row.homepage}
-                            >
-                              {row.homepage}
-                            </a>
-                          ) : (
-                            <span className="text-xs text-gray-400 truncate" title={row.homepage}>
-                              {row.homepage}
-                            </span>
-                          )}
+                          <UrlLink
+                            url={row.homepage}
+                            className="text-xs text-gray-400 truncate"
+                            linkClassName="text-xs text-gray-400 truncate hover:text-olive-600 hover:underline"
+                          />
                         </div>
                       )}
                     </td>

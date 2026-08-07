@@ -424,3 +424,39 @@ describe('LicenseList 테이블 구성', () => {
     expect(cells[cells.length - 1].className).not.toContain('opacity-40')
   })
 })
+
+describe('LicenseList Webpage 링크', () => {
+  it('Webpage를 새 탭 링크로 렌더한다', () => {
+    render(
+      <LicenseList rows={[makeLicenseRow({ webpage: 'https://opensource.org/license/mit' })]} />,
+    )
+
+    const link = screen.getByRole('link', { name: 'https://opensource.org/license/mit' })
+    expect(link).toHaveAttribute('href', 'https://opensource.org/license/mit')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('webpageList의 추가 URL도 링크로 렌더한다', () => {
+    render(
+      <LicenseList
+        rows={[
+          makeLicenseRow({
+            webpage: 'https://opensource.org/license/mit',
+            webpageList: 'https://spdx.org/licenses/MIT.html, https://mit-license.org',
+          }),
+        ]}
+      />,
+    )
+
+    expect(screen.getAllByRole('link')).toHaveLength(3)
+    expect(screen.getByRole('link', { name: 'https://mit-license.org' })).toBeInTheDocument()
+  })
+
+  it('http(s)가 아닌 Webpage는 링크로 만들지 않는다', () => {
+    render(<LicenseList rows={[makeLicenseRow({ webpage: 'javascript:alert(1)' })]} />)
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByText('javascript:alert(1)')).toBeInTheDocument()
+  })
+})
