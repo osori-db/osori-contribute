@@ -8,7 +8,7 @@ import type { LicenseRow } from '@/lib/types'
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
-const mockSearchParams = new URLSearchParams()
+let mockSearchParams = new URLSearchParams()
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useSearchParams: () => mockSearchParams,
@@ -65,6 +65,9 @@ function makeLicenseRow(overrides: Partial<LicenseRow> = {}): LicenseRow {
 }
 
 beforeEach(() => {
+  mockPush.mockReset()
+  mockReplace.mockReset()
+  mockSearchParams = new URLSearchParams()
   mockFetchCreateLicense.mockReset()
   mockMapNamesToIds.mockReturnValue([26])
   mockHasLicense.mockReturnValue(false)
@@ -355,38 +358,39 @@ describe('LicenseList 검색', () => {
     )
   }
 
-  it('License Name으로 목록을 걸러낸다', async () => {
-    const user = userEvent.setup()
+  it('licenseQ 파라미터로 목록을 걸러낸다', () => {
+    mockSearchParams = new URLSearchParams('licenseQ=mit')
     render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License', 'GPL-3.0')} />)
-
-    await user.type(screen.getByLabelText('License Name 검색'), 'mit')
 
     expect(screen.getByText('MIT License')).toBeInTheDocument()
     expect(screen.queryByText('Apache License 2.0')).not.toBeInTheDocument()
     expect(screen.queryByText('GPL-3.0')).not.toBeInTheDocument()
   })
 
-  it('검색 결과 개수를 표시하고 배치 버튼 문구가 바뀐다', async () => {
+  it('OSS 목록과 다른 파라미터 이름을 쓴다', async () => {
     const user = userEvent.setup()
+    render(<LicenseList rows={makeNamedRows('MIT License')} />)
+
+    await user.type(screen.getByLabelText('License Name 검색'), 'mit')
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('?licenseQ=mit', { scroll: false })
+    })
+  })
+
+  it('ossQ 파라미터에는 반응하지 않는다', () => {
+    mockSearchParams = new URLSearchParams('ossQ=nothing-matches')
     render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License')} />)
 
-    expect(screen.getByRole('button', { name: '전체 기여' })).toBeInTheDocument()
+    expect(screen.getByText('Apache License 2.0')).toBeInTheDocument()
+    expect(screen.getByText('MIT License')).toBeInTheDocument()
+  })
 
-    await user.type(screen.getByLabelText('License Name 검색'), 'License')
+  it('검색 결과 개수를 표시하고 배치 버튼 문구가 바뀐다', () => {
+    mockSearchParams = new URLSearchParams('licenseQ=License')
+    render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License', 'GPL-3.0')} />)
 
     expect(screen.getByText('2건')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '검색 결과 기여 (2건)' })).toBeInTheDocument()
-  })
-
-  it('검색어를 지우면 전체 목록으로 돌아온다', async () => {
-    const user = userEvent.setup()
-    render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License')} />)
-
-    await user.type(screen.getByLabelText('License Name 검색'), 'MIT')
-    expect(screen.queryByText('Apache License 2.0')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '검색어 지우기' }))
-
-    expect(screen.getByText('Apache License 2.0')).toBeInTheDocument()
   })
 })

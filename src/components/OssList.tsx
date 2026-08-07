@@ -4,6 +4,7 @@ import { Fragment, useState, useCallback, useEffect, useMemo, useRef } from 'rea
 import { useAuth } from '@/hooks/useAuth'
 import { useLicenseMapping } from '@/hooks/useLicenseMapping'
 import { usePageParam } from '@/hooks/usePageParam'
+import { useQueryParam } from '@/hooks/useQueryParam'
 import { fetchOssList, fetchOssVersions, fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
 import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
 import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
@@ -19,6 +20,8 @@ import Pagination from './Pagination'
 import type { OssRow, ContributeStatus } from '@/lib/types'
 
 const PAGE_SIZE = 20
+/** 라이선스 목록과 동시에 마운트되므로 검색어 파라미터 이름을 분리한다. */
+const SEARCH_PARAM = 'ossQ'
 
 interface OssListProps {
   readonly rows: readonly OssRow[]
@@ -52,7 +55,6 @@ export default function OssList({ rows }: OssListProps) {
   const [rowOverrides, setRowOverrides] = useState<Record<number, OssRow>>({})
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
   const [errorMessages, setErrorMessages] = useState<Record<number, string>>({})
   const [batchSaving, setBatchSaving] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
@@ -60,6 +62,7 @@ export default function OssList({ rows }: OssListProps) {
   const [showBatchResult, setShowBatchResult] = useState(false)
 
   const { licenseMap, loading: licenseMappingLoading, mapNamesToIds: mapLicenseNamesToIds } = useLicenseMapping()
+  const { query, setQuery } = useQueryParam(SEARCH_PARAM)
 
   const effectiveRows = useMemo(
     () => rows.map((row, i) => rowOverrides[i] ?? row),
@@ -76,15 +79,6 @@ export default function OssList({ rows }: OssListProps) {
 
   const { page: currentPage, setPage, resetPage } = usePageParam(
     Math.ceil(filteredRows.length / PAGE_SIZE),
-  )
-
-  const handleQueryChange = useCallback(
-    (next: string) => {
-      setQuery(next)
-      // 결과 개수가 달라지므로 첫 페이지부터 다시 본다.
-      resetPage()
-    },
-    [resetPage],
   )
 
   // 새 파일을 올렸을 때만 초기화한다. 첫 렌더에서 초기화하면 URL의 page가 무시된다.
@@ -356,7 +350,7 @@ export default function OssList({ rows }: OssListProps) {
           id="oss-search"
           label="OSS Name 검색"
           value={query}
-          onChange={handleQueryChange}
+          onChange={setQuery}
           placeholder="OSS Name 검색"
           resultCount={filteredRows.length}
         />
@@ -394,12 +388,12 @@ export default function OssList({ rows }: OssListProps) {
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
-        <table className="text-left" style={{ width: 1160, minWidth: 1160 }}>
+        <table className="text-left" style={{ width: 1238, minWidth: 1238 }}>
           <colgroup>
             <col style={{ width: 50 }} />
             <col style={{ width: 280 }} />
-            <col style={{ width: 360 }} />
-            <col style={{ width: 300 }} />
+            <col style={{ width: 288 }} />
+            <col style={{ width: 450 }} />
             <col style={{ width: 60 }} />
             <col style={{ width: 110 }} />
           </colgroup>

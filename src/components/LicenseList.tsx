@@ -3,6 +3,7 @@
 import { Fragment, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { usePageParam } from '@/hooks/usePageParam'
+import { useQueryParam } from '@/hooks/useQueryParam'
 import { useRestrictions } from '@/hooks/useRestrictions'
 import { useLicenseMapping } from '@/hooks/useLicenseMapping'
 import { fetchCreateLicense } from '@/lib/api-client'
@@ -20,6 +21,8 @@ import Pagination from './Pagination'
 import type { LicenseRow, ContributeStatus } from '@/lib/types'
 
 const PAGE_SIZE = 20
+/** OSS 목록과 동시에 마운트되므로 검색어 파라미터 이름을 분리한다. */
+const SEARCH_PARAM = 'licenseQ'
 
 interface LicenseListProps {
   readonly rows: readonly LicenseRow[]
@@ -100,13 +103,13 @@ export default function LicenseList({ rows }: LicenseListProps) {
   const { token } = useAuth()
   const { restrictions, mapNamesToIds } = useRestrictions()
   const { hasLicense, loading: licenseMapLoading } = useLicenseMapping()
+  const { query, setQuery } = useQueryParam(SEARCH_PARAM)
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
   const [selectedRow, setSelectedRow] = useState<{ row: LicenseRow; index: number } | null>(null)
   // 모달에서 수정한 행. 표시·배치 기여가 모두 수정본을 쓰도록 원본 위에 덮어쓴다.
   const [rowOverrides, setRowOverrides] = useState<Record<number, LicenseRow>>({})
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
   const [errorMessages, setErrorMessages] = useState<Record<number, string>>({})
   const [batchSaving, setBatchSaving] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
@@ -128,15 +131,6 @@ export default function LicenseList({ rows }: LicenseListProps) {
 
   const { page: currentPage, setPage, resetPage } = usePageParam(
     Math.ceil(filteredRows.length / PAGE_SIZE),
-  )
-
-  const handleQueryChange = useCallback(
-    (next: string) => {
-      setQuery(next)
-      // 결과 개수가 달라지므로 첫 페이지부터 다시 본다.
-      resetPage()
-    },
-    [resetPage],
   )
 
   // 새 파일을 올렸을 때만 초기화한다. 첫 렌더에서 초기화하면 URL의 page가 무시된다.
@@ -294,7 +288,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
           id="license-search"
           label="License Name 검색"
           value={query}
-          onChange={handleQueryChange}
+          onChange={setQuery}
           placeholder="License Name 검색"
           resultCount={filteredRows.length}
         />
