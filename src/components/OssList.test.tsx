@@ -869,7 +869,7 @@ describe('OssList 페이지당 표시 개수', () => {
   })
 
   it('size 파라미터만큼 표시한다', () => {
-    mockSearchParams = new URLSearchParams('size=50')
+    mockSearchParams = new URLSearchParams('ossSize=50')
     render(<OssList rows={makeRows(60)} />)
 
     expect(sizeSelect()).toHaveValue('50')
@@ -884,12 +884,12 @@ describe('OssList 페이지당 표시 개수', () => {
 
     await user.selectOptions(sizeSelect(), '50')
 
-    expect(mockReplace).toHaveBeenCalledWith('?size=50', { scroll: false })
+    expect(mockReplace).toHaveBeenCalledWith('?ossSize=50', { scroll: false })
   })
 
   it('기본값으로 되돌리면 size 파라미터를 제거한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('size=50')
+    mockSearchParams = new URLSearchParams('ossSize=50')
     render(<OssList rows={makeRows(60)} />)
 
     await user.selectOptions(sizeSelect(), '20')
@@ -898,7 +898,7 @@ describe('OssList 페이지당 표시 개수', () => {
   })
 
   it('허용되지 않은 size는 기본값으로 취급한다', () => {
-    mockSearchParams = new URLSearchParams('size=99999')
+    mockSearchParams = new URLSearchParams('ossSize=99999')
     render(<OssList rows={makeRows(25)} />)
 
     expect(sizeSelect()).toHaveValue('20')
@@ -906,7 +906,7 @@ describe('OssList 페이지당 표시 개수', () => {
   })
 
   it('size가 커지면 전체 페이지 수가 줄어든다', () => {
-    mockSearchParams = new URLSearchParams('size=100')
+    mockSearchParams = new URLSearchParams('ossSize=100')
     render(<OssList rows={makeRows(60)} />)
 
     // 60건이 한 페이지에 들어가므로 2페이지 버튼이 없다
@@ -920,6 +920,22 @@ describe('OssList 페이지당 표시 개수', () => {
 
     await user.selectOptions(sizeSelect(), '50')
 
-    expect(mockReplace).toHaveBeenCalledWith('?tab=oss&ossQ=pkg&size=50', { scroll: false })
+    expect(mockReplace).toHaveBeenCalledWith('?tab=oss&ossQ=pkg&ossSize=50', { scroll: false })
+  })
+})
+
+describe('OssList 표시 개수는 탭별로 분리된다', () => {
+  it('라이선스 목록의 licenseSize에는 반응하지 않는다', () => {
+    mockSearchParams = new URLSearchParams('licenseSize=100')
+    render(
+      <OssList
+        rows={Array.from({ length: 25 }, (_, i) =>
+          makeOssRow({ no: i + 1, ossName: `pkg-${i + 1}` }),
+        )}
+      />,
+    )
+
+    expect(screen.getByLabelText('페이지당 표시 개수')).toHaveValue('20')
+    expect(screen.queryByText('pkg-21')).not.toBeInTheDocument()
   })
 })
