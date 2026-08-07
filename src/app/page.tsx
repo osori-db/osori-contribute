@@ -1,14 +1,7 @@
-import { Suspense } from 'react'
-import HomeView from '@/components/HomeView'
+import { redirect } from 'next/navigation'
+import { DEFAULT_TAB_PATH } from '@/lib/view-params'
 
-/**
- * HomeView가 useSearchParams를 사용하므로 Suspense 경계가 필요하다.
- * 경계가 없으면 정적 프리렌더 단계에서 빌드가 실패한다.
- */
-export default function HomePage() {
-  return (
-    <Suspense>
-      <HomeView />
-    </Suspense>
-  )
+/** 루트로 들어오면 기본 탭으로 보낸다. */
+export default function RootPage() {
+  redirect(DEFAULT_TAB_PATH)
 }

@@ -482,11 +482,11 @@ describe('LicenseList 페이지당 표시 개수', () => {
 
   it('tab 등 다른 파라미터는 유지한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('tab=license')
+    mockSearchParams = new URLSearchParams('debug=1')
     render(<LicenseList rows={makeRows(60)} />)
 
     await user.selectOptions(sizeSelect(), '100')
 
-    expect(mockReplace).toHaveBeenCalledWith('?tab=license&size=100', { scroll: false })
+    expect(mockReplace).toHaveBeenCalledWith('?debug=1&size=100', { scroll: false })
   })
 })

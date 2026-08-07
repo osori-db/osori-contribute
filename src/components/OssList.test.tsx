@@ -628,12 +628,12 @@ describe('OssList 페이지 URL 파라미터', () => {
 
   it('다른 파라미터는 유지한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('tab=oss')
+    mockSearchParams = new URLSearchParams('debug=1')
     render(<OssList rows={makeRows(25)} />)
 
     await user.click(screen.getByRole('button', { name: '2' }))
 
-    expect(mockPush).toHaveBeenCalledWith('?tab=oss&page=2', { scroll: false })
+    expect(mockPush).toHaveBeenCalledWith('?debug=1&page=2', { scroll: false })
   })
 
   it('범위를 벗어난 page는 마지막 페이지로 보정한다', () => {
@@ -715,13 +715,13 @@ describe('OssList 검색', () => {
 
   it('다른 파라미터는 유지한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('tab=oss')
+    mockSearchParams = new URLSearchParams('debug=1')
     render(<OssList rows={makeNamedRows('lodash')} />)
 
     await user.type(screen.getByLabelText('OSS Name 검색'), 'lo')
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('?tab=oss&q=lo', { scroll: false })
+      expect(mockReplace).toHaveBeenCalledWith('?debug=1&q=lo', { scroll: false })
     })
   })
 
@@ -915,11 +915,11 @@ describe('OssList 페이지당 표시 개수', () => {
 
   it('다른 파라미터는 유지한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('tab=oss&q=pkg')
+    mockSearchParams = new URLSearchParams('debug=1&q=pkg')
     render(<OssList rows={makeRows(60)} />)
 
     await user.selectOptions(sizeSelect(), '50')
 
-    expect(mockReplace).toHaveBeenCalledWith('?tab=oss&q=pkg&size=50', { scroll: false })
+    expect(mockReplace).toHaveBeenCalledWith('?debug=1&q=pkg&size=50', { scroll: false })
   })
 })

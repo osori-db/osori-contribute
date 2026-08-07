@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { TAB_PARAM, TAB_SCOPED_PARAMS } from '@/lib/view-params'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { TAB_PATHS, TAB_SCOPED_PARAMS, parseTabFromPathname } from '@/lib/view-params'
 import { useAuth } from '@/hooks/useAuth'
 import AuthTokenInput from './AuthTokenInput'
 import Header from './Header'
@@ -11,21 +11,15 @@ import LicenseTab from './LicenseTab'
 import OssTab from './OssTab'
 import type { ContributeType } from '@/lib/types'
 
-const DEFAULT_TAB: ContributeType = 'license'
-
 type ParamSnapshot = Readonly<Record<string, string>>
-
-/** URL 파라미터는 사용자가 직접 입력할 수 있으므로 알려진 탭 값만 허용한다. */
-function parseTab(raw: string | null): ContributeType {
-  return raw === 'oss' || raw === 'license' ? raw : DEFAULT_TAB
-}
 
 export default function HomeView() {
   const { isAuthenticated } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const activeTab = parseTab(searchParams.get(TAB_PARAM))
+  const activeTab = parseTabFromPathname(pathname)
 
   // 떠난 탭의 검색어·표시 개수·페이지. URL에는 보고 있는 탭의 값만 두고,
   // 나머지는 여기에 보관했다가 돌아올 때 되돌린다.
@@ -51,8 +45,10 @@ export default function HomeView() {
         params.set(name, value)
       }
 
-      params.set(TAB_PARAM, tab)
-      router.push(`?${params.toString()}`, { scroll: false })
+      const queryString = params.toString()
+      router.push(queryString ? `${TAB_PATHS[tab]}?${queryString}` : TAB_PATHS[tab], {
+        scroll: false,
+      })
     },
     [router, searchParams, activeTab, stashed],
   )
