@@ -673,8 +673,8 @@ describe('OssList 검색', () => {
     return names.map((ossName, i) => makeOssRow({ no: i + 1, ossName }))
   }
 
-  it('ossQ 파라미터로 목록을 걸러낸다', () => {
-    mockSearchParams = new URLSearchParams('ossQ=ax')
+  it('q 파라미터로 목록을 걸러낸다', () => {
+    mockSearchParams = new URLSearchParams('q=ax')
     render(<OssList rows={makeNamedRows('lodash', 'axios', 'react')} />)
 
     expect(screen.getByText('axios')).toBeInTheDocument()
@@ -683,21 +683,21 @@ describe('OssList 검색', () => {
   })
 
   it('대소문자를 구분하지 않는다', () => {
-    mockSearchParams = new URLSearchParams('ossQ=LODASH')
+    mockSearchParams = new URLSearchParams('q=LODASH')
     render(<OssList rows={makeNamedRows('Lodash', 'axios')} />)
 
     expect(screen.getByText('Lodash')).toBeInTheDocument()
     expect(screen.queryByText('axios')).not.toBeInTheDocument()
   })
 
-  it('검색어를 입력하면 URL에 ossQ 파라미터를 남긴다', async () => {
+  it('검색어를 입력하면 URL에 q 파라미터를 남긴다', async () => {
     const user = userEvent.setup()
     render(<OssList rows={makeNamedRows('lodash', 'axios')} />)
 
     await user.type(screen.getByLabelText('OSS Name 검색'), 'ax')
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('?ossQ=ax', { scroll: false })
+      expect(mockReplace).toHaveBeenCalledWith('?q=ax', { scroll: false })
     })
   })
 
@@ -709,7 +709,7 @@ describe('OssList 검색', () => {
     await user.type(screen.getByLabelText('OSS Name 검색'), 'ax')
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('?ossQ=ax', { scroll: false })
+      expect(mockReplace).toHaveBeenCalledWith('?q=ax', { scroll: false })
     })
   })
 
@@ -721,13 +721,13 @@ describe('OssList 검색', () => {
     await user.type(screen.getByLabelText('OSS Name 검색'), 'lo')
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('?tab=oss&ossQ=lo', { scroll: false })
+      expect(mockReplace).toHaveBeenCalledWith('?tab=oss&q=lo', { scroll: false })
     })
   })
 
-  it('지우기 버튼은 ossQ 파라미터를 제거한다', async () => {
+  it('지우기 버튼은 q 파라미터를 제거한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('ossQ=lodash')
+    mockSearchParams = new URLSearchParams('q=lodash')
     render(<OssList rows={makeNamedRows('lodash', 'axios')} />)
 
     await user.click(screen.getByRole('button', { name: '검색어 지우기' }))
@@ -736,21 +736,21 @@ describe('OssList 검색', () => {
   })
 
   it('URL의 검색어가 입력창에 채워진다', () => {
-    mockSearchParams = new URLSearchParams('ossQ=lodash')
+    mockSearchParams = new URLSearchParams('q=lodash')
     render(<OssList rows={makeNamedRows('lodash', 'axios')} />)
 
     expect(screen.getByLabelText('OSS Name 검색')).toHaveValue('lodash')
   })
 
   it('검색 결과 개수를 표시한다', () => {
-    mockSearchParams = new URLSearchParams('ossQ=react')
+    mockSearchParams = new URLSearchParams('q=react')
     render(<OssList rows={makeNamedRows('react', 'react-dom', 'vue')} />)
 
     expect(screen.getByText('2건')).toBeInTheDocument()
   })
 
   it('검색 중에는 배치 버튼이 검색 결과만 처리함을 알린다', () => {
-    mockSearchParams = new URLSearchParams('ossQ=react')
+    mockSearchParams = new URLSearchParams('q=react')
     render(<OssList rows={makeNamedRows('lodash', 'axios', 'react')} />)
 
     expect(screen.getByRole('button', { name: '검색 결과 기여 (1건)' })).toBeInTheDocument()
@@ -764,7 +764,7 @@ describe('OssList 검색', () => {
 
   it('검색 중 배치 기여는 걸러진 항목만 처리한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('ossQ=react')
+    mockSearchParams = new URLSearchParams('q=react')
     mockFetchOssList.mockResolvedValue(OSS_NOT_FOUND)
     mockFetchCreateOss.mockResolvedValue({
       success: true,
@@ -785,7 +785,7 @@ describe('OssList 검색', () => {
 
   it('검색으로 걸러도 기여 상태가 원래 행에 유지된다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('ossQ=axios')
+    mockSearchParams = new URLSearchParams('q=axios')
     mockFetchOssList.mockResolvedValue(OSS_FOUND)
     mockFetchOssVersions.mockResolvedValue(VERSION_FOUND)
 
@@ -869,7 +869,7 @@ describe('OssList 페이지당 표시 개수', () => {
   })
 
   it('size 파라미터만큼 표시한다', () => {
-    mockSearchParams = new URLSearchParams('ossSize=50')
+    mockSearchParams = new URLSearchParams('size=50')
     render(<OssList rows={makeRows(60)} />)
 
     expect(sizeSelect()).toHaveValue('50')
@@ -884,12 +884,12 @@ describe('OssList 페이지당 표시 개수', () => {
 
     await user.selectOptions(sizeSelect(), '50')
 
-    expect(mockReplace).toHaveBeenCalledWith('?ossSize=50', { scroll: false })
+    expect(mockReplace).toHaveBeenCalledWith('?size=50', { scroll: false })
   })
 
   it('기본값으로 되돌리면 size 파라미터를 제거한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('ossSize=50')
+    mockSearchParams = new URLSearchParams('size=50')
     render(<OssList rows={makeRows(60)} />)
 
     await user.selectOptions(sizeSelect(), '20')
@@ -898,7 +898,7 @@ describe('OssList 페이지당 표시 개수', () => {
   })
 
   it('허용되지 않은 size는 기본값으로 취급한다', () => {
-    mockSearchParams = new URLSearchParams('ossSize=99999')
+    mockSearchParams = new URLSearchParams('size=99999')
     render(<OssList rows={makeRows(25)} />)
 
     expect(sizeSelect()).toHaveValue('20')
@@ -906,7 +906,7 @@ describe('OssList 페이지당 표시 개수', () => {
   })
 
   it('size가 커지면 전체 페이지 수가 줄어든다', () => {
-    mockSearchParams = new URLSearchParams('ossSize=100')
+    mockSearchParams = new URLSearchParams('size=100')
     render(<OssList rows={makeRows(60)} />)
 
     // 60건이 한 페이지에 들어가므로 2페이지 버튼이 없다
@@ -915,27 +915,11 @@ describe('OssList 페이지당 표시 개수', () => {
 
   it('다른 파라미터는 유지한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('tab=oss&ossQ=pkg')
+    mockSearchParams = new URLSearchParams('tab=oss&q=pkg')
     render(<OssList rows={makeRows(60)} />)
 
     await user.selectOptions(sizeSelect(), '50')
 
-    expect(mockReplace).toHaveBeenCalledWith('?tab=oss&ossQ=pkg&ossSize=50', { scroll: false })
-  })
-})
-
-describe('OssList 표시 개수는 탭별로 분리된다', () => {
-  it('라이선스 목록의 licenseSize에는 반응하지 않는다', () => {
-    mockSearchParams = new URLSearchParams('licenseSize=100')
-    render(
-      <OssList
-        rows={Array.from({ length: 25 }, (_, i) =>
-          makeOssRow({ no: i + 1, ossName: `pkg-${i + 1}` }),
-        )}
-      />,
-    )
-
-    expect(screen.getByLabelText('페이지당 표시 개수')).toHaveValue('20')
-    expect(screen.queryByText('pkg-21')).not.toBeInTheDocument()
+    expect(mockReplace).toHaveBeenCalledWith('?tab=oss&q=pkg&size=50', { scroll: false })
   })
 })

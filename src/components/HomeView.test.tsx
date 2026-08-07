@@ -70,14 +70,54 @@ describe('HomeView 탭 URL 파라미터', () => {
     expect(mockPush).toHaveBeenCalledWith('?tab=oss', { scroll: false })
   })
 
-  it('탭을 바꾸면 이전 탭의 page 파라미터를 물려받지 않는다', async () => {
+  it('탭을 바꾸면 이전 탭의 q/size/page를 물려받지 않는다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('tab=license&page=5')
+    mockSearchParams = new URLSearchParams('tab=license&q=apache&size=100&page=5')
     render(<HomeView />)
 
     await user.click(screen.getByRole('button', { name: 'OSS' }))
 
     expect(mockPush).toHaveBeenCalledWith('?tab=oss', { scroll: false })
+  })
+
+  it('탭 스코프가 아닌 파라미터는 유지한다', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('tab=license&debug=1')
+    render(<HomeView />)
+
+    await user.click(screen.getByRole('button', { name: 'OSS' }))
+
+    expect(mockPush).toHaveBeenCalledWith('?tab=oss&debug=1', { scroll: false })
+  })
+
+  it('같은 탭을 다시 누르면 아무 일도 하지 않는다', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('tab=license&q=apache')
+    render(<HomeView />)
+
+    await user.click(screen.getByRole('button', { name: '라이선스' }))
+
+    expect(mockPush).not.toHaveBeenCalled()
+  })
+
+  it('탭으로 돌아오면 마지막에 보던 q/size/page를 되돌린다', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('tab=license&q=apache&size=100&page=3')
+    const { rerender } = render(<HomeView />)
+
+    // 라이선스 → OSS: 라이선스의 값이 보관되고 URL에서 사라진다
+    await user.click(screen.getByRole('button', { name: 'OSS' }))
+    expect(mockPush).toHaveBeenLastCalledWith('?tab=oss', { scroll: false })
+
+    // 실제 라우팅을 흉내내어 URL을 반영한 뒤 OSS 탭에서 검색
+    mockSearchParams = new URLSearchParams('tab=oss&q=react')
+    rerender(<HomeView />)
+
+    // OSS → 라이선스: 보관해둔 라이선스 값이 되돌아온다
+    await user.click(screen.getByRole('button', { name: '라이선스' }))
+    expect(mockPush).toHaveBeenLastCalledWith('?tab=license&q=apache&size=100&page=3', {
+      scroll: false,
+    })
   })
 
   it('인증 전에는 토큰 입력만 보여준다', () => {

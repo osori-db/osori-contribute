@@ -2,8 +2,8 @@
 
 import { useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { PAGE_PARAM } from '@/lib/view-params'
 
-const PAGE_PARAM = 'page'
 
 interface UsePageParamReturn {
   /** 1 이상, 마지막 페이지 이하로 보정된 현재 페이지 */

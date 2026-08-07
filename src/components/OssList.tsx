@@ -20,10 +20,6 @@ import UrlLink from './UrlLink'
 import Pagination from './Pagination'
 import type { OssRow, ContributeStatus } from '@/lib/types'
 
-/** 라이선스 목록과 동시에 마운트되므로 파라미터 이름을 분리한다. */
-const SEARCH_PARAM = 'ossQ'
-const SIZE_PARAM = 'ossSize'
-
 interface OssListProps {
   readonly rows: readonly OssRow[]
 }
@@ -63,8 +59,8 @@ export default function OssList({ rows }: OssListProps) {
   const [showBatchResult, setShowBatchResult] = useState(false)
 
   const { licenseMap, loading: licenseMappingLoading, mapNamesToIds: mapLicenseNamesToIds } = useLicenseMapping()
-  const { query, setQuery } = useQueryParam(SEARCH_PARAM)
-  const { pageSize, setPageSize } = usePageSizeParam(SIZE_PARAM)
+  const { query, setQuery } = useQueryParam()
+  const { pageSize, setPageSize } = usePageSizeParam()
 
   const effectiveRows = useMemo(
     () => rows.map((row, i) => rowOverrides[i] ?? row),

@@ -22,10 +22,6 @@ import UrlLink from './UrlLink'
 import Pagination from './Pagination'
 import type { LicenseRow, ContributeStatus } from '@/lib/types'
 
-/** OSS 목록과 동시에 마운트되므로 파라미터 이름을 분리한다. */
-const SEARCH_PARAM = 'licenseQ'
-const SIZE_PARAM = 'licenseSize'
-
 interface LicenseListProps {
   readonly rows: readonly LicenseRow[]
 }
@@ -110,8 +106,8 @@ export default function LicenseList({ rows }: LicenseListProps) {
   const { token } = useAuth()
   const { restrictions, mapNamesToIds } = useRestrictions()
   const { hasLicense, loading: licenseMapLoading } = useLicenseMapping()
-  const { query, setQuery } = useQueryParam(SEARCH_PARAM)
-  const { pageSize, setPageSize } = usePageSizeParam(SIZE_PARAM)
+  const { query, setQuery } = useQueryParam()
+  const { pageSize, setPageSize } = usePageSizeParam()
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
   const [selectedRow, setSelectedRow] = useState<{ row: LicenseRow; index: number } | null>(null)
   // 모달에서 수정한 행. 표시·배치 기여가 모두 수정본을 쓰도록 원본 위에 덮어쓴다.

@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { TAB_PARAM, TAB_SCOPED_PARAMS } from '@/lib/view-params'
 import { useAuth } from '@/hooks/useAuth'
 import AuthTokenInput from './AuthTokenInput'
 import Header from './Header'
@@ -10,8 +11,9 @@ import LicenseTab from './LicenseTab'
 import OssTab from './OssTab'
 import type { ContributeType } from '@/lib/types'
 
-const TAB_PARAM = 'tab'
 const DEFAULT_TAB: ContributeType = 'license'
+
+type ParamSnapshot = Readonly<Record<string, string>>
 
 /** URL 파라미터는 사용자가 직접 입력할 수 있으므로 알려진 탭 값만 허용한다. */
 function parseTab(raw: string | null): ContributeType {
@@ -25,15 +27,34 @@ export default function HomeView() {
 
   const activeTab = parseTab(searchParams.get(TAB_PARAM))
 
+  // 떠난 탭의 검색어·표시 개수·페이지. URL에는 보고 있는 탭의 값만 두고,
+  // 나머지는 여기에 보관했다가 돌아올 때 되돌린다.
+  const [stashed, setStashed] = useState<Readonly<Record<string, ParamSnapshot>>>({})
+
   const handleTabChange = useCallback(
     (tab: ContributeType) => {
+      if (tab === activeTab) return
+
       const params = new URLSearchParams(searchParams.toString())
+
+      // 떠나는 탭의 값을 걷어내 보관한다.
+      const leaving: Record<string, string> = {}
+      for (const name of TAB_SCOPED_PARAMS) {
+        const value = params.get(name)
+        if (value !== null) leaving[name] = value
+        params.delete(name)
+      }
+      setStashed((prev) => ({ ...prev, [activeTab]: leaving }))
+
+      // 들어가는 탭이 마지막에 보던 값을 되돌린다.
+      for (const [name, value] of Object.entries(stashed[tab] ?? {})) {
+        params.set(name, value)
+      }
+
       params.set(TAB_PARAM, tab)
-      // 탭마다 목록이 다르므로 이전 탭의 페이지 번호를 물려받지 않는다.
-      params.delete('page')
       router.push(`?${params.toString()}`, { scroll: false })
     },
-    [router, searchParams],
+    [router, searchParams, activeTab, stashed],
   )
 
   if (!isAuthenticated) {

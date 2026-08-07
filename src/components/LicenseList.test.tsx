@@ -358,8 +358,8 @@ describe('LicenseList 검색', () => {
     )
   }
 
-  it('licenseQ 파라미터로 목록을 걸러낸다', () => {
-    mockSearchParams = new URLSearchParams('licenseQ=mit')
+  it('q 파라미터로 목록을 걸러낸다', () => {
+    mockSearchParams = new URLSearchParams('q=mit')
     render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License', 'GPL-3.0')} />)
 
     expect(screen.getByText('MIT License')).toBeInTheDocument()
@@ -367,27 +367,19 @@ describe('LicenseList 검색', () => {
     expect(screen.queryByText('GPL-3.0')).not.toBeInTheDocument()
   })
 
-  it('OSS 목록과 다른 파라미터 이름을 쓴다', async () => {
+  it('검색어를 입력하면 URL에 q 파라미터를 남긴다', async () => {
     const user = userEvent.setup()
     render(<LicenseList rows={makeNamedRows('MIT License')} />)
 
     await user.type(screen.getByLabelText('License Name 검색'), 'mit')
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('?licenseQ=mit', { scroll: false })
+      expect(mockReplace).toHaveBeenCalledWith('?q=mit', { scroll: false })
     })
   })
 
-  it('ossQ 파라미터에는 반응하지 않는다', () => {
-    mockSearchParams = new URLSearchParams('ossQ=nothing-matches')
-    render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License')} />)
-
-    expect(screen.getByText('Apache License 2.0')).toBeInTheDocument()
-    expect(screen.getByText('MIT License')).toBeInTheDocument()
-  })
-
   it('검색 결과 개수를 표시하고 배치 버튼 문구가 바뀐다', () => {
-    mockSearchParams = new URLSearchParams('licenseQ=License')
+    mockSearchParams = new URLSearchParams('q=License')
     render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License', 'GPL-3.0')} />)
 
     expect(screen.getByText('2건')).toBeInTheDocument()
@@ -470,8 +462,8 @@ describe('LicenseList 페이지당 표시 개수', () => {
 
   const sizeSelect = () => screen.getByLabelText('페이지당 표시 개수')
 
-  it('licenseSize 파라미터만큼 표시한다', () => {
-    mockSearchParams = new URLSearchParams('licenseSize=50')
+  it('size 파라미터만큼 표시한다', () => {
+    mockSearchParams = new URLSearchParams('size=50')
     render(<LicenseList rows={makeRows(60)} />)
 
     expect(sizeSelect()).toHaveValue('50')
@@ -479,32 +471,22 @@ describe('LicenseList 페이지당 표시 개수', () => {
     expect(screen.queryByText('lic-51')).not.toBeInTheDocument()
   })
 
-  it('OSS 목록의 ossSize에는 반응하지 않는다', () => {
-    mockSearchParams = new URLSearchParams('ossSize=100')
-    render(<LicenseList rows={makeRows(25)} />)
-
-    expect(sizeSelect()).toHaveValue('20')
-    expect(screen.queryByText('lic-21')).not.toBeInTheDocument()
-  })
-
-  it('개수를 바꾸면 licenseSize 파라미터를 남긴다', async () => {
+  it('개수를 바꾸면 size 파라미터를 남긴다', async () => {
     const user = userEvent.setup()
     render(<LicenseList rows={makeRows(60)} />)
 
     await user.selectOptions(sizeSelect(), '50')
 
-    expect(mockReplace).toHaveBeenCalledWith('?licenseSize=50', { scroll: false })
+    expect(mockReplace).toHaveBeenCalledWith('?size=50', { scroll: false })
   })
 
-  it('OSS 검색어 등 다른 파라미터는 유지한다', async () => {
+  it('tab 등 다른 파라미터는 유지한다', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('tab=license&ossQ=react')
+    mockSearchParams = new URLSearchParams('tab=license')
     render(<LicenseList rows={makeRows(60)} />)
 
     await user.selectOptions(sizeSelect(), '100')
 
-    expect(mockReplace).toHaveBeenCalledWith('?tab=license&ossQ=react&licenseSize=100', {
-      scroll: false,
-    })
+    expect(mockReplace).toHaveBeenCalledWith('?tab=license&size=100', { scroll: false })
   })
 })
