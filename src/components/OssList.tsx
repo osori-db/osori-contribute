@@ -6,6 +6,7 @@ import { useLicenseMapping } from '@/hooks/useLicenseMapping'
 import { fetchOssList, fetchOssVersions, fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
 import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
 import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
+import { isSafeHttpUrl } from '@/lib/url'
 import { changedFieldKeys } from '@/lib/row-diff'
 import { OSS_FIELD_LABELS, toFieldLabels } from '@/lib/field-labels'
 import BatchResultModal from './BatchResultModal'
@@ -353,29 +354,25 @@ export default function OssList({ rows }: OssListProps) {
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
-        <table className="text-left" style={{ width: 1600, minWidth: 1600 }}>
+        <table className="text-left" style={{ width: 1160, minWidth: 1160 }}>
           <colgroup>
             <col style={{ width: 50 }} />
-            <col style={{ width: 240 }} />
-            <col style={{ width: 100 }} />
+            <col style={{ width: 280 }} />
+            <col style={{ width: 360 }} />
             <col style={{ width: 300 }} />
             <col style={{ width: 60 }} />
-            <col style={{ width: 280 }} />
-            <col style={{ width: 280 }} />
-            <col style={{ width: 180 }} />
-            <col style={{ width: 100 }} />
+            <col style={{ width: 110 }} />
           </colgroup>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600 text-center">No</th>
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">OSS Name</th>
-              <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Version</th>
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Download Location</th>
-              <th className="px-3 py-2.5 text-xs font-semibold text-gray-600 text-center">Comb.</th>
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Declared License</th>
-              <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Detected License</th>
-              <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Homepage</th>
-              <th className="px-3 py-2.5 text-xs font-semibold text-gray-600 text-center">작업</th>
+              <th className="px-3 py-2.5 text-xs font-semibold text-gray-600 text-center">Comb.</th>
+              <th className="sticky right-0 z-10 bg-gray-50 border-l border-gray-200 px-3 py-2.5 text-xs font-semibold text-gray-600 text-center">
+                작업
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white">
@@ -384,36 +381,70 @@ export default function OssList({ rows }: OssListProps) {
               const status = statuses[globalIndex] ?? 'idle'
               const errorMsg = errorMessages[globalIndex]
               const edited = editedFields[globalIndex]
+              // 처리가 끝난 행은 흐리게 보인다. 다만 sticky 작업 셀에 opacity를 주면
+              // 가로 스크롤되는 셀이 비쳐 보이므로, 행이 아니라 데이터 셀에만 적용한다.
+              const dim = status === 'success' || status === 'exists' ? 'opacity-40' : ''
               return (
                 <Fragment key={globalIndex}>
                   <tr
-                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${edited ? 'bg-amber-50/50' : ''} ${status === 'success' || status === 'exists' ? 'opacity-40' : ''}`}
+                    className={`border-b border-gray-100 transition-colors hover:bg-gray-50 ${edited ? 'bg-amber-50' : 'bg-white'}`}
                   >
-                    <td className="px-3 py-2.5 text-xs text-gray-400 text-center">
+                    <td className={`px-3 py-2.5 text-xs text-gray-400 text-center ${dim}`}>
                       {row.no}
                     </td>
-                    <td className="px-3 py-2.5 text-sm text-gray-900 font-medium">
+                    <td className={`px-3 py-2.5 text-sm text-gray-900 font-medium ${dim}`}>
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate" title={row.ossName}>
                           {row.ossName}
                         </span>
                         {edited && <EditedBadge fields={edited} />}
                       </div>
-                      {row.nickname && (
-                        <div className="text-xs text-gray-400 truncate mt-0.5" title={row.nickname}>
-                          {row.nickname}
+                      {(row.version || row.nickname) && (
+                      <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+                        {row.version && (
+                          <span className="shrink-0 inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700">
+                            {row.version}
+                          </span>
+                        )}
+                        {row.nickname && (
+                          <span className="text-xs text-gray-400 truncate" title={row.nickname}>
+                            {row.nickname}
+                          </span>
+                        )}
+                      </div>
+                      )}
+                    </td>
+                    <td className={`px-3 py-2.5 text-xs text-gray-600 ${dim}`}>
+                      {isSafeHttpUrl(row.downloadLocation) ? (
+                        <a
+                          href={row.downloadLocation}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate block text-olive-600 hover:text-olive-700 hover:underline"
+                          title={row.downloadLocation}
+                        >
+                          {row.downloadLocation}
+                        </a>
+                      ) : (
+                        <span className="truncate block" title={row.downloadLocation}>
+                          {row.downloadLocation || '-'}
+                        </span>
+                      )}
+                      {row.homepage && (
+                        <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+                          <span className="shrink-0 inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700">
+                            Homepage
+                          </span>
+                          <span className="text-xs text-gray-400 truncate" title={row.homepage}>
+                            {row.homepage}
+                          </span>
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">
-                      {row.version || <span className="text-gray-300">-</span>}
+                    <td className={`px-3 py-2.5 ${dim}`}>
+                      <LicenseBadges value={row.declaredLicenseList} />
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">
-                      <span className="truncate block" title={row.downloadLocation}>
-                        {row.downloadLocation || '-'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className={`px-3 py-2.5 text-center ${dim}`}>
                       {row.licenseCombination ? (
                         <span className="inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700">
                           {row.licenseCombination}
@@ -422,18 +453,7 @@ export default function OssList({ rows }: OssListProps) {
                         <span className="text-gray-300">-</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5">
-                      <LicenseBadges value={row.declaredLicenseList} />
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <LicenseBadges value={row.detectedLicenseList} />
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">
-                      <span className="truncate block" title={row.homepage ?? ''}>
-                        {row.homepage || <span className="text-gray-300">-</span>}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className="sticky right-0 z-10 bg-inherit border-l border-gray-200 px-3 py-2.5 text-center">
                       <ContributeButton
                         status={status}
                         disabled={batchSaving}
@@ -443,7 +463,7 @@ export default function OssList({ rows }: OssListProps) {
                   </tr>
                   {errorMsg && (
                     <tr className="bg-red-50">
-                      <td colSpan={9} className="px-3 py-1.5 text-xs text-red-600">
+                      <td colSpan={6} className="px-3 py-1.5 text-xs text-red-600">
                         {errorMsg}
                       </td>
                     </tr>

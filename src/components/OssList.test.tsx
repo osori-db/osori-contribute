@@ -467,3 +467,91 @@ describe('OssList 전체 기여', () => {
     })
   })
 })
+
+describe('OssList 테이블 구성', () => {
+  it('컬럼이 지정된 순서로 표시된다', () => {
+    render(<OssList rows={[makeOssRow()]} />)
+
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
+    expect(headers).toEqual([
+      'No',
+      'OSS Name',
+      'Download Location',
+      'Declared License',
+      'Comb.',
+      '작업',
+    ])
+  })
+
+  it('Version은 별도 컬럼이 아니라 OSS Name 아래에 표시된다', () => {
+    render(<OssList rows={[makeOssRow({ ossName: 'lodash', version: '4.17.21' })]} />)
+
+    expect(screen.queryByRole('columnheader', { name: 'Version' })).not.toBeInTheDocument()
+
+    const nameCell = screen.getByText('lodash').closest('td')
+    expect(nameCell).toHaveTextContent('4.17.21')
+    // 이름 줄과 분리된 아래 줄에 있어야 한다
+    expect(screen.getByText('lodash').parentElement).not.toHaveTextContent('4.17.21')
+  })
+
+  it('Download Location을 새 탭 링크로 렌더한다', () => {
+    render(
+      <OssList rows={[makeOssRow({ downloadLocation: 'https://github.com/lodash/lodash' })]} />,
+    )
+
+    const link = screen.getByRole('link', { name: 'https://github.com/lodash/lodash' })
+    expect(link).toHaveAttribute('href', 'https://github.com/lodash/lodash')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('http(s)가 아닌 Download Location은 링크로 만들지 않는다', () => {
+    render(<OssList rows={[makeOssRow({ downloadLocation: 'javascript:alert(1)' })]} />)
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByText('javascript:alert(1)')).toBeInTheDocument()
+  })
+
+  it('Homepage는 별도 컬럼이 아니라 Download Location 셀에 부가 정보로 표시된다', () => {
+    render(
+      <OssList
+        rows={[
+          makeOssRow({
+            downloadLocation: 'https://github.com/lodash/lodash',
+            homepage: 'https://lodash.com',
+          }),
+        ]}
+      />,
+    )
+
+    expect(screen.queryByRole('columnheader', { name: 'Homepage' })).not.toBeInTheDocument()
+
+    const locationCell = screen.getByText('https://github.com/lodash/lodash').closest('td')
+    expect(locationCell).toHaveTextContent('Homepage')
+    expect(locationCell).toHaveTextContent('https://lodash.com')
+  })
+
+  it('Version과 Homepage가 없으면 해당 부가 정보를 렌더하지 않는다', () => {
+    render(<OssList rows={[makeOssRow({ version: null, homepage: null })]} />)
+
+    expect(screen.queryByText('Homepage')).not.toBeInTheDocument()
+  })
+
+  it('Detected License 컬럼은 표시하지 않는다', () => {
+    render(<OssList rows={[makeOssRow({ detectedLicenseList: 'Apache-2.0' })]} />)
+
+    expect(
+      screen.queryByRole('columnheader', { name: 'Detected License' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('작업 컬럼은 가로 스크롤과 무관하게 고정된다', () => {
+    render(<OssList rows={[makeOssRow()]} />)
+
+    const actionHeader = screen.getByRole('columnheader', { name: '작업' })
+    expect(actionHeader.className).toContain('sticky')
+
+    const actionCell = screen.getByRole('button', { name: '기여하기' }).closest('td')
+    expect(actionCell?.className).toContain('sticky')
+  })
+})
