@@ -787,3 +787,48 @@ describe('OssList 검색', () => {
     expect(screen.getByRole('button', { name: '기여하기' })).toBeInTheDocument()
   })
 })
+
+describe('OssList Declared License 다중값 표시', () => {
+  function declaredCell(): HTMLElement {
+    // 컬럼 순서: No(0), OSS Name(1), Download Location(2), Declared License(3), Comb.(4), 작업(5)
+    return document.querySelectorAll('tbody tr td')[3] as HTMLElement
+  }
+
+  it('쉼표로 구분된 값을 각각 배지로 표시한다', () => {
+    render(<OssList rows={[makeOssRow({ declaredLicenseList: 'MIT, Apache-2.0, BSD-3-Clause' })]} />)
+
+    const cell = declaredCell()
+    const badges = cell.querySelectorAll('span')
+    expect(badges).toHaveLength(3)
+    expect([...badges].map((b) => b.textContent)).toEqual(['MIT', 'Apache-2.0', 'BSD-3-Clause'])
+  })
+
+  it('줄바꿈으로 구분된 값도 각각 배지로 표시한다', () => {
+    render(<OssList rows={[makeOssRow({ declaredLicenseList: 'MIT\nApache-2.0' })]} />)
+
+    expect(declaredCell().querySelectorAll('span')).toHaveLength(2)
+  })
+
+  it('개수 제한 없이 모두 표시하며 줄바꿈으로 흐른다', () => {
+    const many = 'MIT, Apache-2.0, BSD-3-Clause, GPL-2.0, LGPL-2.1, MPL-2.0, ISC'
+    render(<OssList rows={[makeOssRow({ declaredLicenseList: many })]} />)
+
+    const cell = declaredCell()
+    expect(cell.querySelectorAll('span')).toHaveLength(7)
+    // 잘리지 않고 여러 줄로 흐르는 구조
+    expect(cell.querySelector('div')?.className).toContain('flex-wrap')
+    expect(cell.className).not.toContain('truncate')
+  })
+
+  it('빈 항목과 공백은 배지로 만들지 않는다', () => {
+    render(<OssList rows={[makeOssRow({ declaredLicenseList: 'MIT, ,  , Apache-2.0' })]} />)
+
+    expect(declaredCell().querySelectorAll('span')).toHaveLength(2)
+  })
+
+  it('값이 없으면 하이픈을 표시한다', () => {
+    render(<OssList rows={[makeOssRow({ declaredLicenseList: null })]} />)
+
+    expect(declaredCell().textContent).toBe('-')
+  })
+})

@@ -394,3 +394,33 @@ describe('LicenseList 검색', () => {
     expect(screen.getByRole('button', { name: '검색 결과 기여 (2건)' })).toBeInTheDocument()
   })
 })
+
+describe('LicenseList 테이블 구성', () => {
+  it('작업 컬럼은 가로 스크롤과 무관하게 고정된다', () => {
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+
+    const actionHeader = screen.getByRole('columnheader', { name: '작업' })
+    expect(actionHeader.className).toContain('sticky')
+
+    const actionCell = screen.getByRole('button', { name: '기여하기' }).closest('td')
+    expect(actionCell?.className).toContain('sticky')
+    // 고정 셀에 opacity가 걸리면 뒤 내용이 비쳐 보이므로 흐림은 데이터 셀에만 적용한다
+    expect(actionCell?.className).not.toContain('opacity')
+  })
+
+  it('처리가 끝난 행은 데이터 셀만 흐려지고 작업 셀은 선명하다', async () => {
+    const user = userEvent.setup()
+    mockHasLicense.mockReturnValue(true)
+
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+    await user.click(screen.getByRole('button', { name: '기여하기' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('이미 존재함')).toBeInTheDocument()
+    })
+
+    const cells = document.querySelectorAll('tbody tr td')
+    expect(cells[0].className).toContain('opacity-40')
+    expect(cells[cells.length - 1].className).not.toContain('opacity-40')
+  })
+})

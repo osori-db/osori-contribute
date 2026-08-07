@@ -349,22 +349,27 @@ export default function LicenseList({ rows }: LicenseListProps) {
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Restriction</th>
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Webpage</th>
               <th className="px-3 py-2.5 text-xs font-semibold text-gray-600">Description</th>
-              <th className="px-3 py-2.5 text-xs font-semibold text-gray-600 text-center">작업</th>
+              <th className="sticky right-0 z-10 bg-gray-50 border-l border-gray-200 px-3 py-2.5 text-xs font-semibold text-gray-600 text-center">
+                작업
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white">
             {pagedRows.map(({ row, index: globalIndex }) => {
               const status = statuses[globalIndex] ?? 'idle'
               const edited = editedFields[globalIndex]
+              // 처리가 끝난 행은 흐리게 보인다. 다만 sticky 작업 셀에 opacity를 주면
+              // 가로 스크롤되는 셀이 비쳐 보이므로, 행이 아니라 데이터 셀에만 적용한다.
+              const dim = status === 'success' || status === 'exists' ? 'opacity-40' : ''
               return (
                 <Fragment key={globalIndex}>
                   <tr
-                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${edited ? 'bg-amber-50/50' : ''} ${status === 'success' || status === 'exists' ? 'opacity-40' : ''}`}
+                    className={`border-b border-gray-100 transition-colors hover:bg-gray-50 ${edited ? 'bg-amber-50' : 'bg-white'}`}
                   >
-                    <td className="px-3 py-2.5 text-xs text-gray-400 text-center">
+                    <td className={`px-3 py-2.5 text-xs text-gray-400 text-center ${dim}`}>
                       {row.no}
                     </td>
-                    <td className="px-3 py-2.5 text-sm text-gray-900 font-medium">
+                    <td className={`px-3 py-2.5 text-sm text-gray-900 font-medium ${dim}`}>
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate" title={row.licenseName}>
                           {row.licenseName}
@@ -377,27 +382,27 @@ export default function LicenseList({ rows }: LicenseListProps) {
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">
+                    <td className={`px-3 py-2.5 text-xs text-gray-600 ${dim}`}>
                       <span className="truncate block" title={row.spdxIdentifier}>
                         {row.spdxIdentifier}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className={`px-3 py-2.5 text-center ${dim}`}>
                       <ObligationBadge value={row.obligationNotice} />
                     </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className={`px-3 py-2.5 text-center ${dim}`}>
                       <span className="text-xs text-gray-500">{row.obligationDisclosingSrc}</span>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className={`px-3 py-2.5 ${dim}`}>
                       <RestrictionBadges value={row.restriction} />
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className={`px-3 py-2.5 ${dim}`}>
                       <WebpageCell webpage={row.webpage} webpageList={row.webpageList} />
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600">
+                    <td className={`px-3 py-2.5 text-xs text-gray-600 ${dim}`}>
                       {row.descriptionKo || <span className="text-gray-300">-</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className="sticky right-0 z-10 bg-inherit border-l border-gray-200 px-3 py-2.5 text-center">
                       <ContributeButton
                         status={status}
                         onClick={() => handleOpenModal(globalIndex, row)}
