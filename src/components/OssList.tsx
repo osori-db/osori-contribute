@@ -1,8 +1,9 @@
 'use client'
 
-import { Fragment, useState, useCallback, useEffect, useMemo } from 'react'
+import { Fragment, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLicenseMapping } from '@/hooks/useLicenseMapping'
+import { usePageParam } from '@/hooks/usePageParam'
 import { fetchOssList, fetchOssVersions, fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
 import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
 import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
@@ -50,7 +51,6 @@ export default function OssList({ rows }: OssListProps) {
   const [rowOverrides, setRowOverrides] = useState<Record<number, OssRow>>({})
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [currentPage, setCurrentPage] = useState(1)
   const [errorMessages, setErrorMessages] = useState<Record<number, string>>({})
   const [batchSaving, setBatchSaving] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
@@ -59,15 +59,23 @@ export default function OssList({ rows }: OssListProps) {
 
   const { licenseMap, loading: licenseMappingLoading, mapNamesToIds: mapLicenseNamesToIds } = useLicenseMapping()
 
-  useEffect(() => {
-    setCurrentPage(1)
-    setRowOverrides({})
-  }, [rows])
-
   const effectiveRows = useMemo(
     () => rows.map((row, i) => rowOverrides[i] ?? row),
     [rows, rowOverrides],
   )
+
+  const { page: currentPage, setPage, resetPage } = usePageParam(
+    Math.ceil(effectiveRows.length / PAGE_SIZE),
+  )
+
+  // 새 파일을 올렸을 때만 초기화한다. 첫 렌더에서 초기화하면 URL의 page가 무시된다.
+  const prevRowsRef = useRef(rows)
+  useEffect(() => {
+    if (prevRowsRef.current === rows) return
+    prevRowsRef.current = rows
+    setRowOverrides({})
+    resetPage()
+  }, [rows, resetPage])
 
   const pagedRows = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
@@ -479,7 +487,7 @@ export default function OssList({ rows }: OssListProps) {
         totalCount={effectiveRows.length}
         currentPage={currentPage}
         pageSize={PAGE_SIZE}
-        onPageChange={setCurrentPage}
+        onPageChange={setPage}
       />
 
       {selectedRow && (

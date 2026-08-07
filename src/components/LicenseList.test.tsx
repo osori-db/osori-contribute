@@ -6,6 +6,14 @@ import type { LicenseRow } from '@/lib/types'
 
 // ─── Mocks ───
 
+const mockPush = vi.fn()
+const mockReplace = vi.fn()
+const mockSearchParams = new URLSearchParams()
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useSearchParams: () => mockSearchParams,
+}))
+
 const mockToken = 'test-token'
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ token: mockToken }),

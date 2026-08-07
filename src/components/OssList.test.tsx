@@ -6,6 +6,14 @@ import type { OssRow } from '@/lib/types'
 
 // ─── Mocks ───
 
+const mockPush = vi.fn()
+const mockReplace = vi.fn()
+let mockSearchParams = new URLSearchParams()
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useSearchParams: () => mockSearchParams,
+}))
+
 const mockToken = 'test-token'
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ token: mockToken }),
@@ -77,6 +85,9 @@ function mockPreCheckNotFound() {
 }
 
 beforeEach(() => {
+  mockPush.mockReset()
+  mockReplace.mockReset()
+  mockSearchParams = new URLSearchParams()
   mockFetchOssList.mockReset()
   mockFetchOssVersions.mockReset()
   mockFetchCreateOss.mockReset()
@@ -553,5 +564,88 @@ describe('OssList 테이블 구성', () => {
 
     const actionCell = screen.getByRole('button', { name: '기여하기' }).closest('td')
     expect(actionCell?.className).toContain('sticky')
+  })
+})
+
+describe('OssList 페이지 URL 파라미터', () => {
+  function makeRows(count: number): OssRow[] {
+    return Array.from({ length: count }, (_, i) =>
+      makeOssRow({ no: i + 1, ossName: `pkg-${i + 1}` }),
+    )
+  }
+
+  it('page 파라미터가 없으면 1페이지를 보여준다', () => {
+    render(<OssList rows={makeRows(25)} />)
+
+    expect(screen.getByText('pkg-1')).toBeInTheDocument()
+    expect(screen.queryByText('pkg-21')).not.toBeInTheDocument()
+  })
+
+  it('page 파라미터에 해당하는 페이지를 보여준다', () => {
+    mockSearchParams = new URLSearchParams('page=2')
+    render(<OssList rows={makeRows(25)} />)
+
+    expect(screen.getByText('pkg-21')).toBeInTheDocument()
+    expect(screen.queryByText('pkg-1')).not.toBeInTheDocument()
+  })
+
+  it('페이지를 이동하면 URL에 page 파라미터를 남긴다', async () => {
+    const user = userEvent.setup()
+    render(<OssList rows={makeRows(25)} />)
+
+    await user.click(screen.getByRole('button', { name: '2' }))
+
+    expect(mockPush).toHaveBeenCalledWith('?page=2', { scroll: false })
+  })
+
+  it('1페이지로 돌아가면 page 파라미터를 제거한다', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('page=2')
+    render(<OssList rows={makeRows(25)} />)
+
+    await user.click(screen.getByRole('button', { name: '1' }))
+
+    expect(mockPush).toHaveBeenCalledWith('?', { scroll: false })
+  })
+
+  it('다른 파라미터는 유지한다', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('tab=oss')
+    render(<OssList rows={makeRows(25)} />)
+
+    await user.click(screen.getByRole('button', { name: '2' }))
+
+    expect(mockPush).toHaveBeenCalledWith('?tab=oss&page=2', { scroll: false })
+  })
+
+  it('범위를 벗어난 page는 마지막 페이지로 보정한다', () => {
+    mockSearchParams = new URLSearchParams('page=99')
+    render(<OssList rows={makeRows(25)} />)
+
+    expect(screen.getByText('pkg-21')).toBeInTheDocument()
+  })
+
+  it('숫자가 아닌 page는 1페이지로 취급한다', () => {
+    mockSearchParams = new URLSearchParams('page=abc')
+    render(<OssList rows={makeRows(25)} />)
+
+    expect(screen.getByText('pkg-1')).toBeInTheDocument()
+  })
+
+  it('첫 렌더에서는 URL의 page를 유지한다', () => {
+    mockSearchParams = new URLSearchParams('page=2')
+    render(<OssList rows={makeRows(25)} />)
+
+    expect(mockReplace).not.toHaveBeenCalled()
+  })
+
+  it('새 목록이 들어오면 1페이지로 되돌리되 히스토리를 남기지 않는다', () => {
+    mockSearchParams = new URLSearchParams('page=2')
+    const { rerender } = render(<OssList rows={makeRows(25)} />)
+
+    rerender(<OssList rows={makeRows(30)} />)
+
+    expect(mockReplace).toHaveBeenCalledWith('?', { scroll: false })
+    expect(mockPush).not.toHaveBeenCalled()
   })
 })
