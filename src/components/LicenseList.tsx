@@ -326,7 +326,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
-        <table className="text-left" style={{ width: 1750, minWidth: 1750 }}>
+        <table className="text-left" style={{ width: 1790, minWidth: 1790 }}>
           <colgroup>
             <col style={{ width: 50 }} />
             <col style={{ width: 300 }} />
@@ -336,7 +336,8 @@ export default function LicenseList({ rows }: LicenseListProps) {
             <col style={{ width: 180 }} />
             <col style={{ width: 340 }} />
             <col style={{ width: 280 }} />
-            <col style={{ width: 100 }} />
+            {/* 가장 긴 문구인 "이미 존재함"이 아이콘과 함께 한 줄에 들어갈 폭 */}
+            <col style={{ width: 140 }} />
           </colgroup>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">

@@ -388,14 +388,15 @@ export default function OssList({ rows }: OssListProps) {
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
-        <table className="text-left" style={{ width: 1238, minWidth: 1238 }}>
+        <table className="text-left" style={{ width: 1268, minWidth: 1268 }}>
           <colgroup>
             <col style={{ width: 50 }} />
             <col style={{ width: 280 }} />
             <col style={{ width: 288 }} />
             <col style={{ width: 450 }} />
             <col style={{ width: 60 }} />
-            <col style={{ width: 110 }} />
+            {/* 가장 긴 문구인 "이미 존재함"이 아이콘과 함께 한 줄에 들어갈 폭 */}
+            <col style={{ width: 140 }} />
           </colgroup>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
