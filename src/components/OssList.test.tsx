@@ -517,9 +517,27 @@ describe('OssList 테이블 구성', () => {
   })
 
   it('http(s)가 아닌 Download Location은 링크로 만들지 않는다', () => {
-    render(<OssList rows={[makeOssRow({ downloadLocation: 'javascript:alert(1)' })]} />)
+    render(
+      <OssList rows={[makeOssRow({ downloadLocation: 'javascript:alert(1)', homepage: null })]} />,
+    )
 
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByText('javascript:alert(1)')).toBeInTheDocument()
+  })
+
+  it('Homepage도 새 탭 링크로 렌더한다', () => {
+    render(<OssList rows={[makeOssRow({ homepage: 'https://lodash.com' })]} />)
+
+    const link = screen.getByRole('link', { name: 'https://lodash.com' })
+    expect(link).toHaveAttribute('href', 'https://lodash.com')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('http(s)가 아닌 Homepage는 링크로 만들지 않는다', () => {
+    render(<OssList rows={[makeOssRow({ homepage: 'javascript:alert(1)' })]} />)
+
+    expect(screen.queryByRole('link', { name: 'javascript:alert(1)' })).not.toBeInTheDocument()
     expect(screen.getByText('javascript:alert(1)')).toBeInTheDocument()
   })
 
@@ -830,5 +848,78 @@ describe('OssList Declared License 다중값 표시', () => {
     render(<OssList rows={[makeOssRow({ declaredLicenseList: null })]} />)
 
     expect(declaredCell().textContent).toBe('-')
+  })
+})
+
+describe('OssList 페이지당 표시 개수', () => {
+  function makeRows(count: number): OssRow[] {
+    return Array.from({ length: count }, (_, i) =>
+      makeOssRow({ no: i + 1, ossName: `pkg-${i + 1}` }),
+    )
+  }
+
+  const sizeSelect = () => screen.getByLabelText('페이지당 표시 개수')
+
+  it('기본값은 20개씩이다', () => {
+    render(<OssList rows={makeRows(25)} />)
+
+    expect(sizeSelect()).toHaveValue('20')
+    expect(screen.getByText('pkg-20')).toBeInTheDocument()
+    expect(screen.queryByText('pkg-21')).not.toBeInTheDocument()
+  })
+
+  it('size 파라미터만큼 표시한다', () => {
+    mockSearchParams = new URLSearchParams('size=50')
+    render(<OssList rows={makeRows(60)} />)
+
+    expect(sizeSelect()).toHaveValue('50')
+    expect(screen.getByText('pkg-50')).toBeInTheDocument()
+    expect(screen.queryByText('pkg-51')).not.toBeInTheDocument()
+  })
+
+  it('개수를 바꾸면 URL에 size 파라미터를 남기고 첫 페이지로 돌아간다', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('page=2')
+    render(<OssList rows={makeRows(60)} />)
+
+    await user.selectOptions(sizeSelect(), '50')
+
+    expect(mockReplace).toHaveBeenCalledWith('?size=50', { scroll: false })
+  })
+
+  it('기본값으로 되돌리면 size 파라미터를 제거한다', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('size=50')
+    render(<OssList rows={makeRows(60)} />)
+
+    await user.selectOptions(sizeSelect(), '20')
+
+    expect(mockReplace).toHaveBeenCalledWith('?', { scroll: false })
+  })
+
+  it('허용되지 않은 size는 기본값으로 취급한다', () => {
+    mockSearchParams = new URLSearchParams('size=99999')
+    render(<OssList rows={makeRows(25)} />)
+
+    expect(sizeSelect()).toHaveValue('20')
+    expect(screen.queryByText('pkg-21')).not.toBeInTheDocument()
+  })
+
+  it('size가 커지면 전체 페이지 수가 줄어든다', () => {
+    mockSearchParams = new URLSearchParams('size=100')
+    render(<OssList rows={makeRows(60)} />)
+
+    // 60건이 한 페이지에 들어가므로 2페이지 버튼이 없다
+    expect(screen.queryByRole('button', { name: '2' })).not.toBeInTheDocument()
+  })
+
+  it('다른 파라미터는 유지한다', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('tab=oss&ossQ=pkg')
+    render(<OssList rows={makeRows(60)} />)
+
+    await user.selectOptions(sizeSelect(), '50')
+
+    expect(mockReplace).toHaveBeenCalledWith('?tab=oss&ossQ=pkg&size=50', { scroll: false })
   })
 })

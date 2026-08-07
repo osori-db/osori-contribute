@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useLicenseMapping } from '@/hooks/useLicenseMapping'
 import { usePageParam } from '@/hooks/usePageParam'
 import { useQueryParam } from '@/hooks/useQueryParam'
+import { usePageSizeParam, PAGE_SIZE_OPTIONS } from '@/hooks/usePageSizeParam'
 import { fetchOssList, fetchOssVersions, fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
 import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
 import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
@@ -19,7 +20,6 @@ import SearchInput from './SearchInput'
 import Pagination from './Pagination'
 import type { OssRow, ContributeStatus } from '@/lib/types'
 
-const PAGE_SIZE = 20
 /** 라이선스 목록과 동시에 마운트되므로 검색어 파라미터 이름을 분리한다. */
 const SEARCH_PARAM = 'ossQ'
 
@@ -63,6 +63,7 @@ export default function OssList({ rows }: OssListProps) {
 
   const { licenseMap, loading: licenseMappingLoading, mapNamesToIds: mapLicenseNamesToIds } = useLicenseMapping()
   const { query, setQuery } = useQueryParam(SEARCH_PARAM)
+  const { pageSize, setPageSize } = usePageSizeParam()
 
   const effectiveRows = useMemo(
     () => rows.map((row, i) => rowOverrides[i] ?? row),
@@ -78,7 +79,7 @@ export default function OssList({ rows }: OssListProps) {
   }, [effectiveRows, query])
 
   const { page: currentPage, setPage, resetPage } = usePageParam(
-    Math.ceil(filteredRows.length / PAGE_SIZE),
+    Math.ceil(filteredRows.length / pageSize),
   )
 
   // 새 파일을 올렸을 때만 초기화한다. 첫 렌더에서 초기화하면 URL의 page가 무시된다.
@@ -91,9 +92,9 @@ export default function OssList({ rows }: OssListProps) {
   }, [rows, resetPage])
 
   const pagedRows = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return filteredRows.slice(start, start + PAGE_SIZE)
-  }, [filteredRows, currentPage])
+    const start = (currentPage - 1) * pageSize
+    return filteredRows.slice(start, start + pageSize)
+  }, [filteredRows, currentPage, pageSize])
 
   // 실제로 값이 달라진 행만 "수정됨"으로 표시한다.
   const editedFields = useMemo(() => {
@@ -469,9 +470,21 @@ export default function OssList({ rows }: OssListProps) {
                           <span className="shrink-0 inline-block px-1.5 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700">
                             Homepage
                           </span>
-                          <span className="text-xs text-gray-400 truncate" title={row.homepage}>
-                            {row.homepage}
-                          </span>
+                          {isSafeHttpUrl(row.homepage) ? (
+                            <a
+                              href={row.homepage ?? undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-gray-400 truncate hover:text-olive-600 hover:underline"
+                              title={row.homepage}
+                            >
+                              {row.homepage}
+                            </a>
+                          ) : (
+                            <span className="text-xs text-gray-400 truncate" title={row.homepage}>
+                              {row.homepage}
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -512,8 +525,10 @@ export default function OssList({ rows }: OssListProps) {
       <Pagination
         totalCount={filteredRows.length}
         currentPage={currentPage}
-        pageSize={PAGE_SIZE}
+        pageSize={pageSize}
         onPageChange={setPage}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={setPageSize}
       />
 
       {selectedRow && (

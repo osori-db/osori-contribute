@@ -4,6 +4,7 @@ import { Fragment, useState, useCallback, useEffect, useMemo, useRef } from 'rea
 import { useAuth } from '@/hooks/useAuth'
 import { usePageParam } from '@/hooks/usePageParam'
 import { useQueryParam } from '@/hooks/useQueryParam'
+import { usePageSizeParam, PAGE_SIZE_OPTIONS } from '@/hooks/usePageSizeParam'
 import { useRestrictions } from '@/hooks/useRestrictions'
 import { useLicenseMapping } from '@/hooks/useLicenseMapping'
 import { fetchCreateLicense } from '@/lib/api-client'
@@ -20,7 +21,6 @@ import SearchInput from './SearchInput'
 import Pagination from './Pagination'
 import type { LicenseRow, ContributeStatus } from '@/lib/types'
 
-const PAGE_SIZE = 20
 /** OSS 목록과 동시에 마운트되므로 검색어 파라미터 이름을 분리한다. */
 const SEARCH_PARAM = 'licenseQ'
 
@@ -104,6 +104,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
   const { restrictions, mapNamesToIds } = useRestrictions()
   const { hasLicense, loading: licenseMapLoading } = useLicenseMapping()
   const { query, setQuery } = useQueryParam(SEARCH_PARAM)
+  const { pageSize, setPageSize } = usePageSizeParam()
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
   const [selectedRow, setSelectedRow] = useState<{ row: LicenseRow; index: number } | null>(null)
   // 모달에서 수정한 행. 표시·배치 기여가 모두 수정본을 쓰도록 원본 위에 덮어쓴다.
@@ -130,7 +131,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
   }, [effectiveRows, query])
 
   const { page: currentPage, setPage, resetPage } = usePageParam(
-    Math.ceil(filteredRows.length / PAGE_SIZE),
+    Math.ceil(filteredRows.length / pageSize),
   )
 
   // 새 파일을 올렸을 때만 초기화한다. 첫 렌더에서 초기화하면 URL의 page가 무시된다.
@@ -143,9 +144,9 @@ export default function LicenseList({ rows }: LicenseListProps) {
   }, [rows, resetPage])
 
   const pagedRows = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return filteredRows.slice(start, start + PAGE_SIZE)
-  }, [filteredRows, currentPage])
+    const start = (currentPage - 1) * pageSize
+    return filteredRows.slice(start, start + pageSize)
+  }, [filteredRows, currentPage, pageSize])
 
   // 실제로 값이 달라진 행만 "수정됨"으로 표시한다.
   const editedFields = useMemo(() => {
@@ -427,8 +428,10 @@ export default function LicenseList({ rows }: LicenseListProps) {
       <Pagination
         totalCount={filteredRows.length}
         currentPage={currentPage}
-        pageSize={PAGE_SIZE}
+        pageSize={pageSize}
         onPageChange={setPage}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={setPageSize}
       />
 
       {selectedRow && (

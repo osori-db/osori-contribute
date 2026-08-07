@@ -7,6 +7,9 @@ interface PaginationProps {
   readonly currentPage: number
   readonly pageSize: number
   readonly onPageChange: (page: number) => void
+  /** 지정하면 페이지당 표시 개수를 고를 수 있다. */
+  readonly pageSizeOptions?: readonly number[]
+  readonly onPageSizeChange?: (size: number) => void
 }
 
 const MAX_VISIBLE_PAGES = 5
@@ -58,6 +61,8 @@ export default function Pagination({
   currentPage,
   pageSize,
   onPageChange,
+  pageSizeOptions,
+  onPageSizeChange,
 }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
 
@@ -73,9 +78,26 @@ export default function Pagination({
 
   return (
     <div className="flex items-center justify-between pt-3">
-      <p className="text-xs text-gray-500">
-        총 {totalCount.toLocaleString()}건 중 {startItem.toLocaleString()}-{endItem.toLocaleString()}
-      </p>
+      <div className="flex items-center gap-3">
+        <p className="text-xs text-gray-500">
+          총 {totalCount.toLocaleString()}건 중 {startItem.toLocaleString()}-{endItem.toLocaleString()}
+        </p>
+        {pageSizeOptions && onPageSizeChange && (
+          <select
+            // id 대신 aria-label을 쓴다. 두 탭이 동시에 마운트되므로 id가 중복된다.
+            aria-label="페이지당 표시 개수"
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            className="h-8 rounded-md border border-gray-200 px-2 text-xs text-gray-600 transition-colors hover:bg-gray-50 focus:outline-none focus:border-olive-500 focus:ring-2 focus:ring-olive-500/30"
+          >
+            {pageSizeOptions.map((size) => (
+              <option key={size} value={size}>
+                {size}개씩
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       <div className="flex items-center gap-1">
         <button
