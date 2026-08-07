@@ -14,6 +14,7 @@ import BatchResultModal from './BatchResultModal'
 import ContributeButton from './ContributeButton'
 import EditedBadge from './EditedBadge'
 import OssContributeModal from './OssContributeModal'
+import SearchInput from './SearchInput'
 import Pagination from './Pagination'
 import type { OssRow, ContributeStatus } from '@/lib/types'
 
@@ -51,6 +52,7 @@ export default function OssList({ rows }: OssListProps) {
   const [rowOverrides, setRowOverrides] = useState<Record<number, OssRow>>({})
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const [errorMessages, setErrorMessages] = useState<Record<number, string>>({})
   const [batchSaving, setBatchSaving] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
@@ -64,8 +66,25 @@ export default function OssList({ rows }: OssListProps) {
     [rows, rowOverrides],
   )
 
+  // 검색으로 걸러도 상태·수정본은 원본 인덱스로 관리해야 하므로 인덱스를 함께 들고 다닌다.
+  const filteredRows = useMemo(() => {
+    const indexed = effectiveRows.map((row, index) => ({ row, index }))
+    const keyword = query.trim().toLowerCase()
+    if (!keyword) return indexed
+    return indexed.filter(({ row }) => row.ossName.toLowerCase().includes(keyword))
+  }, [effectiveRows, query])
+
   const { page: currentPage, setPage, resetPage } = usePageParam(
-    Math.ceil(effectiveRows.length / PAGE_SIZE),
+    Math.ceil(filteredRows.length / PAGE_SIZE),
+  )
+
+  const handleQueryChange = useCallback(
+    (next: string) => {
+      setQuery(next)
+      // 결과 개수가 달라지므로 첫 페이지부터 다시 본다.
+      resetPage()
+    },
+    [resetPage],
   )
 
   // 새 파일을 올렸을 때만 초기화한다. 첫 렌더에서 초기화하면 URL의 page가 무시된다.
@@ -79,8 +98,8 @@ export default function OssList({ rows }: OssListProps) {
 
   const pagedRows = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
-    return effectiveRows.slice(start, start + PAGE_SIZE)
-  }, [effectiveRows, currentPage])
+    return filteredRows.slice(start, start + PAGE_SIZE)
+  }, [filteredRows, currentPage])
 
   // 실제로 값이 달라진 행만 "수정됨"으로 표시한다.
   const editedFields = useMemo(() => {
@@ -222,11 +241,12 @@ export default function OssList({ rows }: OssListProps) {
 
     setBatchSaving(true)
     setBatchDone(false)
-    setBatchProgress({ current: 0, total: effectiveRows.length })
+    setBatchProgress({ current: 0, total: filteredRows.length })
     setErrorMessages({})
 
-    for (let i = 0; i < effectiveRows.length; i++) {
-      const row = effectiveRows[i]
+    // 검색 중이면 화면에 보이는 결과만 처리한다.
+    // 보이지 않는 항목까지 전송하면 사용자가 의도하지 않은 대량 기여가 일어난다.
+    for (const { row, index: i } of filteredRows) {
       const currentStatus = statuses[i]
 
       // 이미 성공했거나 존재하는 항목은 스킵
@@ -327,11 +347,20 @@ export default function OssList({ rows }: OssListProps) {
 
     setBatchSaving(false)
     setBatchDone(true)
-  }, [token, effectiveRows, statuses, batchSaving, mapLicenseNamesToIds])
+  }, [token, filteredRows, statuses, batchSaving, mapLicenseNamesToIds])
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <SearchInput
+          id="oss-search"
+          label="OSS Name 검색"
+          value={query}
+          onChange={handleQueryChange}
+          placeholder="OSS Name 검색"
+          resultCount={filteredRows.length}
+        />
+        <div className="flex gap-2">
         {batchDone && !batchSaving && (
           <button
             type="button"
@@ -344,7 +373,7 @@ export default function OssList({ rows }: OssListProps) {
         <button
           type="button"
           onClick={handleBatchContribute}
-          disabled={batchSaving || effectiveRows.length === 0}
+          disabled={batchSaving || filteredRows.length === 0}
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {batchSaving ? (
@@ -355,10 +384,13 @@ export default function OssList({ rows }: OssListProps) {
               </svg>
               처리 중... ({batchProgress.current}/{batchProgress.total})
             </>
+          ) : query.trim() ? (
+            `검색 결과 기여 (${filteredRows.length}건)`
           ) : (
             '전체 기여'
           )}
         </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
@@ -384,8 +416,7 @@ export default function OssList({ rows }: OssListProps) {
             </tr>
           </thead>
           <tbody className="bg-white">
-            {pagedRows.map((row, i) => {
-              const globalIndex = (currentPage - 1) * PAGE_SIZE + i
+            {pagedRows.map(({ row, index: globalIndex }) => {
               const status = statuses[globalIndex] ?? 'idle'
               const errorMsg = errorMessages[globalIndex]
               const edited = editedFields[globalIndex]
@@ -484,7 +515,7 @@ export default function OssList({ rows }: OssListProps) {
       </div>
 
       <Pagination
-        totalCount={effectiveRows.length}
+        totalCount={filteredRows.length}
         currentPage={currentPage}
         pageSize={PAGE_SIZE}
         onPageChange={setPage}

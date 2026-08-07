@@ -34,21 +34,30 @@ describe('HomeView 탭 URL 파라미터', () => {
   it('tab 파라미터가 없으면 라이선스 탭을 보여준다', () => {
     render(<HomeView />)
 
-    expect(screen.getByText('라이선스 탭 내용')).toBeInTheDocument()
+    expect(screen.getByText('라이선스 탭 내용')).toBeVisible()
+    expect(screen.getByText('OSS 탭 내용')).not.toBeVisible()
   })
 
   it('tab=oss면 OSS 탭을 보여준다', () => {
     mockSearchParams = new URLSearchParams('tab=oss')
     render(<HomeView />)
 
-    expect(screen.getByText('OSS 탭 내용')).toBeInTheDocument()
-    expect(screen.queryByText('라이선스 탭 내용')).not.toBeInTheDocument()
+    expect(screen.getByText('OSS 탭 내용')).toBeVisible()
+    expect(screen.getByText('라이선스 탭 내용')).not.toBeVisible()
   })
 
   it('알 수 없는 tab 값은 라이선스 탭으로 취급한다', () => {
     mockSearchParams = new URLSearchParams('tab=drop-table')
     render(<HomeView />)
 
+    expect(screen.getByText('라이선스 탭 내용')).toBeVisible()
+  })
+
+  it('비활성 탭도 언마운트하지 않아 데이터가 유지된다', () => {
+    mockSearchParams = new URLSearchParams('tab=oss')
+    render(<HomeView />)
+
+    // 숨겨져 있을 뿐 DOM에는 남아 있어야 상태가 보존된다
     expect(screen.getByText('라이선스 탭 내용')).toBeInTheDocument()
   })
 
@@ -77,5 +86,6 @@ describe('HomeView 탭 URL 파라미터', () => {
 
     expect(screen.getByText('토큰 입력')).toBeInTheDocument()
     expect(screen.queryByText('라이선스 탭 내용')).not.toBeInTheDocument()
+    expect(screen.queryByText('OSS 탭 내용')).not.toBeInTheDocument()
   })
 })

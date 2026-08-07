@@ -649,3 +649,116 @@ describe('OssList 페이지 URL 파라미터', () => {
     expect(mockPush).not.toHaveBeenCalled()
   })
 })
+
+describe('OssList 검색', () => {
+  function makeNamedRows(...names: string[]): OssRow[] {
+    return names.map((ossName, i) => makeOssRow({ no: i + 1, ossName }))
+  }
+
+  it('OSS Name으로 목록을 걸러낸다', async () => {
+    const user = userEvent.setup()
+    render(<OssList rows={makeNamedRows('lodash', 'axios', 'react')} />)
+
+    await user.type(screen.getByLabelText('OSS Name 검색'), 'ax')
+
+    expect(screen.getByText('axios')).toBeInTheDocument()
+    expect(screen.queryByText('lodash')).not.toBeInTheDocument()
+    expect(screen.queryByText('react')).not.toBeInTheDocument()
+  })
+
+  it('대소문자를 구분하지 않는다', async () => {
+    const user = userEvent.setup()
+    render(<OssList rows={makeNamedRows('Lodash', 'axios')} />)
+
+    await user.type(screen.getByLabelText('OSS Name 검색'), 'LODASH')
+
+    expect(screen.getByText('Lodash')).toBeInTheDocument()
+    expect(screen.queryByText('axios')).not.toBeInTheDocument()
+  })
+
+  it('검색 결과 개수를 표시한다', async () => {
+    const user = userEvent.setup()
+    render(<OssList rows={makeNamedRows('react', 'react-dom', 'vue')} />)
+
+    await user.type(screen.getByLabelText('OSS Name 검색'), 'react')
+
+    expect(screen.getByText('2건')).toBeInTheDocument()
+  })
+
+  it('검색어를 지우면 전체 목록으로 돌아온다', async () => {
+    const user = userEvent.setup()
+    render(<OssList rows={makeNamedRows('lodash', 'axios')} />)
+
+    const input = screen.getByLabelText('OSS Name 검색')
+    await user.type(input, 'lodash')
+    expect(screen.queryByText('axios')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '검색어 지우기' }))
+
+    expect(screen.getByText('axios')).toBeInTheDocument()
+    expect(screen.getByText('lodash')).toBeInTheDocument()
+  })
+
+  it('검색하면 첫 페이지로 돌아간다', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('page=2')
+    render(<OssList rows={makeNamedRows('lodash', 'axios')} />)
+
+    await user.type(screen.getByLabelText('OSS Name 검색'), 'a')
+
+    expect(mockReplace).toHaveBeenCalledWith('?', { scroll: false })
+  })
+
+  it('검색 중에는 배치 버튼이 검색 결과만 처리함을 알린다', async () => {
+    const user = userEvent.setup()
+    render(<OssList rows={makeNamedRows('lodash', 'axios', 'react')} />)
+
+    expect(screen.getByRole('button', { name: '전체 기여' })).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('OSS Name 검색'), 'react')
+
+    expect(screen.getByRole('button', { name: '검색 결과 기여 (1건)' })).toBeInTheDocument()
+  })
+
+  it('검색 중 배치 기여는 걸러진 항목만 처리한다', async () => {
+    const user = userEvent.setup()
+    mockFetchOssList.mockResolvedValue(OSS_NOT_FOUND)
+    mockFetchCreateOss.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 200, name: 'react', purl: '', reviewed: 0 },
+    })
+    mockFetchOssVersions.mockResolvedValue(VERSION_NOT_FOUND)
+    mockFetchCreateOssVersion.mockResolvedValue({ success: true, data: { oss_version_id: 1 } })
+
+    render(<OssList rows={makeNamedRows('lodash', 'axios', 'react')} />)
+    await user.type(screen.getByLabelText('OSS Name 검색'), 'react')
+    await user.click(screen.getByRole('button', { name: '검색 결과 기여 (1건)' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('완료')).toBeInTheDocument()
+    })
+    expect(mockFetchCreateOss).toHaveBeenCalledTimes(1)
+    expect(mockFetchCreateOss.mock.calls[0][1]).toMatchObject({ name: 'react' })
+  })
+
+  it('검색으로 걸러도 기여 상태가 원래 행에 유지된다', async () => {
+    const user = userEvent.setup()
+    mockFetchOssList.mockResolvedValue(OSS_FOUND)
+    mockFetchOssVersions.mockResolvedValue(VERSION_FOUND)
+
+    render(<OssList rows={makeNamedRows('lodash', 'axios')} />)
+
+    // axios만 남기고 기여하기 클릭 → "이미 존재함"
+    await user.type(screen.getByLabelText('OSS Name 검색'), 'axios')
+    await user.click(screen.getByRole('button', { name: '기여하기' }))
+    await waitFor(() => {
+      expect(screen.getByText('이미 존재함')).toBeInTheDocument()
+    })
+
+    // 검색을 지워도 axios만 "이미 존재함"이고 lodash는 기여 가능해야 한다
+    await user.click(screen.getByRole('button', { name: '검색어 지우기' }))
+
+    expect(screen.getByText('이미 존재함')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '기여하기' })).toBeInTheDocument()
+  })
+})

@@ -347,3 +347,46 @@ describe('LicenseList 수정된 행 표시', () => {
     })
   })
 })
+
+describe('LicenseList 검색', () => {
+  function makeNamedRows(...names: string[]): LicenseRow[] {
+    return names.map((licenseName, i) =>
+      makeLicenseRow({ no: i + 1, licenseName, spdxIdentifier: `SPDX-${i + 1}` }),
+    )
+  }
+
+  it('License Name으로 목록을 걸러낸다', async () => {
+    const user = userEvent.setup()
+    render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License', 'GPL-3.0')} />)
+
+    await user.type(screen.getByLabelText('License Name 검색'), 'mit')
+
+    expect(screen.getByText('MIT License')).toBeInTheDocument()
+    expect(screen.queryByText('Apache License 2.0')).not.toBeInTheDocument()
+    expect(screen.queryByText('GPL-3.0')).not.toBeInTheDocument()
+  })
+
+  it('검색 결과 개수를 표시하고 배치 버튼 문구가 바뀐다', async () => {
+    const user = userEvent.setup()
+    render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License')} />)
+
+    expect(screen.getByRole('button', { name: '전체 기여' })).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('License Name 검색'), 'License')
+
+    expect(screen.getByText('2건')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '검색 결과 기여 (2건)' })).toBeInTheDocument()
+  })
+
+  it('검색어를 지우면 전체 목록으로 돌아온다', async () => {
+    const user = userEvent.setup()
+    render(<LicenseList rows={makeNamedRows('Apache License 2.0', 'MIT License')} />)
+
+    await user.type(screen.getByLabelText('License Name 검색'), 'MIT')
+    expect(screen.queryByText('Apache License 2.0')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '검색어 지우기' }))
+
+    expect(screen.getByText('Apache License 2.0')).toBeInTheDocument()
+  })
+})

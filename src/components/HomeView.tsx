@@ -45,7 +45,18 @@ export default function HomeView() {
       <Header />
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-        <div className="p-6">{activeTab === 'license' ? <LicenseTab /> : <OssTab />}</div>
+        {/*
+          탭을 전환해도 업로드한 파일·기여 상태·수정본이 유지되도록 언마운트하지 않고 숨긴다.
+          삼항 연산자로 갈아끼우면 비활성 탭의 상태가 통째로 사라진다.
+        */}
+        <div className="p-6">
+          <div hidden={activeTab !== 'license'}>
+            <LicenseTab />
+          </div>
+          <div hidden={activeTab !== 'oss'}>
+            <OssTab />
+          </div>
+        </div>
       </div>
     </main>
   )
