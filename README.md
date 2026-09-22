@@ -242,6 +242,27 @@ URL은 사용자가 올린 엑셀에서 오므로 신뢰할 수 없습니다. `h
 - 완료 후 **"기여 결과 보기"** 버튼으로 성공/존재/실패/미처리 요약을 확인
 - 검색 중이라면 걸러진 항목만 처리 (버튼 문구가 "검색 결과 기여 (N건)"으로 바뀜)
 
+### 13. 기여 전 사전 검증
+
+"전체 기여" 왼쪽의 **"사전 검증 (N건)"** 버튼으로 목록(검색 중이면 검색 결과)을 한 번에 점검합니다.
+
+| # | 규칙 | 판정 | 대상 |
+|---|------|------|------|
+| 1 | URL 접속 가능 여부 | `2xx`·`3xx` 통과 / `403` 확인 필요 / 그 외 `4xx`·`5xx`·타임아웃·DNS 실패 차단 | OSS `Download Location` + 후보 목록, License `Webpage` |
+| 2 | Download Location URL 형식 | http/https 스킴이 아니면 차단 | OSS |
+| 3·5 | Version 표기 | git hash 차단, `v` 접두사·pre-release 는 확인 필요 | OSS |
+| 4 | 라이선스 OSORI 등록 여부 | 마스터 목록에 없는 이름은 차단 | OSS Declared/Detected |
+| 6 | declared / detected 중복 | 같은 이름이 양쪽에 있으면 차단 (공백·대소문자 무시) | OSS |
+
+- 결과는 행 이름 옆 배지로 남습니다: 초록 `검증 통과` / 앰버 `확인 필요 N` / 빨강 `차단 N`.
+  URL 접속 검사를 하지 못한 결과에는 `*` 가 붙습니다.
+- 사유는 행 아래 서브행에 펼쳐집니다.
+- 행을 수정하면 그 행의 결과는 버려지고, 새 파일을 올리면 전부 초기화됩니다.
+- "전체 기여"는 저장된 검증 결과를 재사용합니다. 검증하지 않은 행에는 규칙 2·3·4·5·6(오프라인)만 적용하고
+  URL 접속 검사는 건너뜁니다. 개별 기여 모달도 같은 오프라인 규칙을 적용해 `차단` 상태에서는 저장을 막습니다.
+- 라이선스 마스터 목록을 불러오는 동안에는 규칙 4의 판정이 뒤집히므로 두 버튼 모두 비활성화됩니다.
+- URL 검사 결과는 세션 동안 URL 단위로 캐시되어 같은 주소를 다시 요청하지 않습니다.
+
 ## 프로젝트 구조
 
 ```
@@ -249,11 +270,12 @@ src/
 ├── app/                              # Next.js App Router
 │   ├── api/
 │   │   ├── contribute/route.ts       # 레거시 기여 API 프록시
-│   │   └── osori/
-│   │       ├── licenses/route.ts     # 라이선스 CRUD API 프록시
-│   │       ├── oss/route.ts          # OSS CRUD API 프록시 (purl 조회 포함)
-│   │       ├── oss-versions/route.ts # OSS 버전 CRUD API 프록시
-│   │       └── restrictions/route.ts # Restriction 목록 조회 프록시
+│   │   ├── osori/
+│   │   │   ├── licenses/route.ts     # 라이선스 CRUD API 프록시
+│   │   │   ├── oss/route.ts          # OSS CRUD API 프록시 (purl 조회 포함)
+│   │   │   ├── oss-versions/route.ts # OSS 버전 CRUD API 프록시
+│   │   │   └── restrictions/route.ts # Restriction 목록 조회 프록시
+│   │   └── url-check/route.ts        # URL 접속 가능 여부 배치 검사 (SSRF 방어)
 │   ├── (tabs)/                       # 탭 라우트 (공유 레이아웃)
 │   │   ├── layout.tsx                # 화면 전체를 그림 (두 탭 모두 마운트 유지)
 │   │   ├── license/page.tsx          # /license 경로만 정의
@@ -274,6 +296,8 @@ src/
 │   ├── Pagination.tsx                # 페이지네이션 + 표시 개수 선택
 │   ├── ContributeButton.tsx          # 기여 버튼 (상태별 UI)
 │   ├── EditedBadge.tsx               # "수정됨" 배지 (변경 항목 툴팁)
+│   ├── ValidationBadge.tsx           # 사전 검증 배지 + 힌트 서브행
+│   ├── PreValidateButton.tsx         # [사전 검증] 버튼 (진행률 표시)
 │   ├── UrlLink.tsx                   # 안전한 URL만 링크로 렌더
 │   ├── BatchResultModal.tsx          # 전체 기여 결과 요약 모달
 │   ├── ErrorMessage.tsx              # 에러 메시지
@@ -299,6 +323,7 @@ src/
 │   ├── useLicenseData.ts             # 라이선스 엑셀 파싱 훅
 │   ├── useLicenseMapping.ts          # 라이선스 이름→ID 매핑 훅
 │   ├── useOssData.ts                 # OSS 엑셀 파싱 훅
+│   ├── usePreValidation.ts           # 사전 검증 실행·결과 보관·무효화·URL 캐시
 │   └── useRestrictions.ts            # Restriction 목록 훅
 │
 ├── lib/
@@ -312,12 +337,17 @@ src/
 │   ├── row-diff.ts                   # 원본 대비 변경된 필드 추출
 │   ├── field-labels.ts               # 필드 키 → 화면 라벨
 │   ├── url.ts                        # 링크로 만들어도 안전한 URL 판별
+│   ├── url-check.ts                  # URL 검사 공용 타입 + 순수 판정 (내부 주소 차단)
+│   ├── url-reachability.ts           # 서버 전용 접속 검사 (동시성·타임아웃·본문 미독출)
+│   ├── field-hints.ts                # 검증 힌트 타입·병합·집계 (정규 위치)
+│   ├── pre-validation.ts             # 오프라인 규칙 + URL 결과 합성 계층
 │   ├── license-parser.ts             # 라이선스 엑셀 컬럼 매핑
 │   ├── license-mapper.ts             # 라이선스 → OSORI 요청 변환
 │   ├── license-validation.ts         # 라이선스 입력 검증
 │   ├── oss-parser.ts                 # OSS 엑셀 컬럼 매핑
 │   ├── oss-mapper.ts                 # OSS → OSORI 요청 변환 + purl 생성
 │   ├── oss-validation.ts             # OSS 입력 검증
+│   ├── license-registry-validation.ts # 라이선스 OSORI 등록 여부 검증
 │   └── external-api.ts               # 외부 API 프록시 유틸
 │
 └── test/
@@ -352,6 +382,12 @@ Next.js API Routes가 프록시 역할을 하여 CORS를 우회하고 외부 API
 | `/api/osori/oss-versions` | `POST` | `POST /api/v2/admin/oss-versions` | OSS 버전 생성 |
 | `/api/osori/restrictions` | `GET` | `GET /api/v2/admin/restrictions` | Restriction 목록 조회 |
 | `/api/contribute` | `POST` | `POST /api/v2/admin/licenses` or `oss` | 레거시 기여 API |
+| `/api/url-check` | `POST` | (외부 프록시 아님) | 엑셀 URL의 접속 가능 여부 배치 검사 |
+
+`/api/url-check`는 OSORI가 아니라 엑셀에 적힌 임의 주소로 요청을 보내므로 SSRF 방어가 붙어 있습니다:
+http/https 스킴만 허용, 내부·사설 주소 차단, 리다이렉트 미추적(`redirect: 'manual'`), 응답 본문 미독출,
+한 요청당 URL 50개 상한, 동시성 6, 타임아웃 8초, `X-Auth-Token` 필수. 응답에는 `outcome`·`status`·`reason`만
+담고 대상 서버의 본문·헤더는 돌려주지 않습니다.
 
 ### 인증 흐름
 
@@ -363,7 +399,7 @@ Next.js API Routes가 프록시 역할을 하여 CORS를 우회하고 외부 API
 
 ## 테스트
 
-10개 테스트 파일, 총 163개 테스트 케이스:
+20개 테스트 파일, 총 431개 테스트 케이스:
 
 | 파일 | 테스트 수 | 설명 |
 |------|-----------|------|
@@ -371,12 +407,22 @@ Next.js API Routes가 프록시 역할을 하여 CORS를 우회하고 외부 API
 | `lib/oss-mapper.test.ts` | 21 | OSS → OSORI 요청 변환 + purl 생성 |
 | `lib/row-diff.test.ts` | 9 | 변경 필드 추출 + 필드 라벨 매핑 |
 | `lib/url.test.ts` | 6 | 링크 허용 스킴 판별 (`javascript:` 등 차단) |
+| `lib/field-hints.test.ts` | 14 | 힌트 병합·집계 (병합 시 입력 불변성 포함) |
+| `lib/oss-validation.test.ts` | 21 | OSS 검증 규칙 (URL 형식·version·declared/detected 중복) |
+| `lib/license-registry-validation.test.ts` | 8 | 라이선스 OSORI 등록 여부 검증 |
+| `lib/pre-validation.test.ts` | 28 | 오프라인 규칙 + URL 결과 합성, 행별 URL 수집 |
+| `lib/url-check.test.ts` | 80 | 내부 주소 차단(IPv4-mapped IPv6·비표준 IPv4 표기 포함), 검사 가능 URL 판정, 힌트 매핑 |
+| `lib/url-reachability.test.ts` | 33 | 상태코드 판정, HEAD→GET 폴백, 타임아웃, 동시성 (fetch 모킹) |
+| `app/api/url-check/route.test.ts` | 15 | 401/400/200 응답, 개수 상한, 응답 누출 방지 |
 | `hooks/useLicenseMapping.test.ts` | 9 | 라이선스 이름→ID 매핑 훅 |
+| `hooks/usePreValidation.test.ts` | 20 | 검증 실행·청크 분할·URL 캐시·무효화·실패 처리 |
 | `components/HomeView.test.tsx` | 10 | 탭 경로 라우팅 + 탭별 파라미터 기억/복원 |
-| `components/OssContributeModal.test.tsx` | 9 | OSS 모달 편집 (초안·검증·불변성·추가 정보) |
+| `components/ValidationBadge.test.tsx` | 12 | 검증 배지 표시 규칙 + 힌트 서브행 |
+| `components/PreValidateButton.test.tsx` | 6 | 버튼 라벨·진행률·비활성화 |
+| `components/OssContributeModal.test.tsx` | 17 | OSS 모달 편집 + 사전 검증 규칙으로 인한 저장 차단 |
 | `components/LicenseContributeModal.test.tsx` | 9 | 라이선스 모달 편집 (초안·검증·Restriction 추가) |
-| `components/LicenseList.test.tsx` | 22 | 라이선스 기여 흐름, 검색, 표시 개수, Webpage 링크 |
-| `components/OssList.test.tsx` | 58 | OSS 기여 흐름, 테이블 구성, 검색, 페이징, 링크, 수정본 반영 |
+| `components/LicenseList.test.tsx` | 29 | 라이선스 기여 흐름, 검색, 표시 개수, Webpage 링크, 사전 검증 |
+| `components/OssList.test.tsx` | 74 | OSS 기여 흐름, 테이블 구성, 검색, 페이징, 링크, 수정본 반영, 사전 검증 |
 
 ```bash
 # 테스트 실행
