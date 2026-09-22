@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OssList from './OssList'
 import type { OssRow } from '@/lib/types'
@@ -1129,6 +1129,46 @@ describe('OssList 사전 검증', () => {
     expect(
       screen.queryByText(/라이선스 목록을 불러오지 못해/),
     ).not.toBeInTheDocument()
+  })
+
+  it('로딩 중에는 규칙 4가 "미등록" 이라고 단정하지 않는다', async () => {
+    // 마스터가 아직 없을 뿐인데 미등록으로 몰면 정상 행에 틀린 사유가 붙는다.
+    // 저장은 모달이 licenseMappingLoading 으로 따로 잠근다.
+    const user = userEvent.setup()
+    mockLicenseMappingLoading = true
+    mockRegisteredLicenses = []
+    mockPreCheckNotFound()
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(screen.getByRole('button', { name: /기여하기/ }))
+    await waitFor(() => {
+      expect(screen.getByText('OSS 기여하기')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText(/OSORI에 등록되지 않은 라이선스입니다/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '매핑 중...' })).toBeDisabled()
+  })
+
+  it('조회에 실패해도 규칙 4가 "미등록" 이라고 단정하지 않는다', async () => {
+    // 툴바 버튼이 막혀 있어 화면으로는 확인할 수 없으므로, error 유무만 다른 두 조건을 대조한다.
+    const user = userEvent.setup()
+    mockUrlsReachable()
+    mockRegisteredLicenses = []
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(preValidateButton())
+    await waitFor(() => {
+      expect(screen.getByText('차단 1')).toBeInTheDocument()
+    })
+
+    // 같은 데이터라도 조회 실패 상태에서는 규칙 4가 꺼져 진입 경로 자체가 닫힌다.
+    cleanup()
+    mockLicenseMappingError = '라이선스 목록 조회에 실패했습니다.'
+    render(<OssList rows={[makeOssRow()]} />)
+
+    expect(preValidateButton()).toBeDisabled()
+    expect(screen.getByRole('button', { name: /기여하기/ })).toBeDisabled()
+    expect(screen.queryByText('차단 1')).not.toBeInTheDocument()
   })
 
   it('조회에 성공했다면 마스터가 비어 있어도 규칙 4는 정상 동작한다', async () => {
