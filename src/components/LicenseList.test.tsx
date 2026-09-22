@@ -30,11 +30,12 @@ vi.mock('@/hooks/useRestrictions', () => ({
 }))
 
 const mockHasLicense = vi.fn().mockReturnValue(false)
+let mockLicenseMappingLoading = false
 vi.mock('@/hooks/useLicenseMapping', () => ({
   useLicenseMapping: () => ({
     licenses: [],
     licenseMap: new Map(),
-    loading: false,
+    loading: mockLicenseMappingLoading,
     error: null,
     mapNamesToIds: vi.fn().mockReturnValue([]),
     hasLicense: (...args: unknown[]) => mockHasLicense(...args),
@@ -42,8 +43,10 @@ vi.mock('@/hooks/useLicenseMapping', () => ({
 }))
 
 const mockFetchCreateLicense = vi.fn()
+const mockCheckUrls = vi.fn()
 vi.mock('@/lib/api-client', () => ({
   fetchCreateLicense: (...args: unknown[]) => mockFetchCreateLicense(...args),
+  checkUrls: (...args: unknown[]) => mockCheckUrls(...args),
 }))
 
 // ─── Helpers ───
@@ -64,13 +67,27 @@ function makeLicenseRow(overrides: Partial<LicenseRow> = {}): LicenseRow {
   }
 }
 
+/** 주어진 URL 을 모두 접속 성공으로 응답한다. */
+function mockUrlsReachable() {
+  mockCheckUrls.mockImplementation((_token: string, urls: readonly string[]) =>
+    Promise.resolve({
+      success: true,
+      data: {
+        results: urls.map((url) => ({ url, outcome: 'ok', status: 200, reason: null })),
+      },
+    }),
+  )
+}
+
 beforeEach(() => {
   mockPush.mockReset()
   mockReplace.mockReset()
   mockSearchParams = new URLSearchParams()
   mockFetchCreateLicense.mockReset()
+  mockCheckUrls.mockReset()
   mockMapNamesToIds.mockReturnValue([26])
   mockHasLicense.mockReturnValue(false)
+  mockLicenseMappingLoading = false
 })
 
 // ─── Tests ───
@@ -488,5 +505,147 @@ describe('LicenseList 페이지당 표시 개수', () => {
     await user.selectOptions(sizeSelect(), '100')
 
     expect(mockReplace).toHaveBeenCalledWith('?debug=1&size=100', { scroll: false })
+  })
+})
+
+describe('LicenseList 사전 검증', () => {
+  const preValidateButton = () => screen.getByRole('button', { name: /사전 검증/ })
+
+  it('툴바에 대상 건수를 표시하는 [사전 검증] 버튼이 있다', () => {
+    render(
+      <LicenseList
+        rows={[makeLicenseRow(), makeLicenseRow({ no: 2, licenseName: 'MIT License' })]}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '사전 검증 (2건)' })).toBeInTheDocument()
+  })
+
+  it('webpage 만 검사 대상으로 보낸다', async () => {
+    const user = userEvent.setup()
+    mockUrlsReachable()
+    render(
+      <LicenseList
+        rows={[
+          makeLicenseRow({
+            webpage: 'https://www.apache.org/licenses/LICENSE-2.0',
+            webpageList: 'https://example.com/other',
+          }),
+        ]}
+      />,
+    )
+
+    await user.click(preValidateButton())
+
+    await waitFor(() => {
+      expect(screen.getByText('검증 통과')).toBeInTheDocument()
+    })
+    expect(mockCheckUrls).toHaveBeenCalledWith('test-token', [
+      'https://www.apache.org/licenses/LICENSE-2.0',
+    ])
+  })
+
+  it('접속 불가한 webpage 는 차단으로 표시한다', async () => {
+    const user = userEvent.setup()
+    mockCheckUrls.mockImplementation((_token: string, urls: readonly string[]) =>
+      Promise.resolve({
+        success: true,
+        data: {
+          results: urls.map((url) => ({
+            url,
+            outcome: 'unreachable',
+            status: 404,
+            reason: 'HTTP 404',
+          })),
+        },
+      }),
+    )
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+
+    await user.click(preValidateButton())
+
+    await waitFor(() => {
+      expect(screen.getByText('차단 1')).toBeInTheDocument()
+    })
+    expect(screen.getByText(/URL에 접속할 수 없습니다\(404\)/)).toBeInTheDocument()
+  })
+
+  it('스킴 없는 webpage 는 invalid 로 차단된다', async () => {
+    const user = userEvent.setup()
+    mockCheckUrls.mockImplementation((_token: string, urls: readonly string[]) =>
+      Promise.resolve({
+        success: true,
+        data: {
+          results: urls.map((url) => ({
+            url,
+            outcome: 'invalid',
+            status: null,
+            reason: 'http/https URL이 아닙니다',
+          })),
+        },
+      }),
+    )
+    render(<LicenseList rows={[makeLicenseRow({ webpage: 'www.apache.org/licenses' })]} />)
+
+    await user.click(preValidateButton())
+
+    await waitFor(() => {
+      expect(screen.getByText('차단 1')).toBeInTheDocument()
+    })
+  })
+
+  it('검증에서 차단된 행은 [전체 기여]가 생성 API 를 호출하지 않는다', async () => {
+    const user = userEvent.setup()
+    mockCheckUrls.mockImplementation((_token: string, urls: readonly string[]) =>
+      Promise.resolve({
+        success: true,
+        data: {
+          results: urls.map((url) => ({
+            url,
+            outcome: 'unreachable',
+            status: 503,
+            reason: 'HTTP 503',
+          })),
+        },
+      }),
+    )
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+
+    await user.click(preValidateButton())
+    await waitFor(() => {
+      expect(screen.getByText('차단 1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: '전체 기여' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /재시도/ })).toBeInTheDocument()
+    })
+    expect(mockFetchCreateLicense).not.toHaveBeenCalled()
+  })
+
+  it('라이선스 목록 로딩 중에는 [사전 검증]과 [전체 기여]를 모두 막는다', () => {
+    mockLicenseMappingLoading = true
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+
+    expect(preValidateButton()).toBeDisabled()
+    expect(screen.getByRole('button', { name: '전체 기여' })).toBeDisabled()
+  })
+
+  it('검사 대상 URL 이 없으면 요청 없이 오프라인 규칙만 반영한다', async () => {
+    const user = userEvent.setup()
+    mockUrlsReachable()
+    render(<LicenseList rows={[makeLicenseRow({ webpage: '' })]} />)
+
+    await user.click(preValidateButton())
+
+    // webpage 가 비어 검사 대상 URL 이 없으므로 요청 없이 오프라인 규칙만 반영된다.
+    await waitFor(() => {
+      expect(screen.getByText('차단 1')).toBeInTheDocument()
+    })
+    expect(mockCheckUrls).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(/License text를 확인할 수 있는 URL을 입력해주세요\./),
+    ).toBeInTheDocument()
   })
 })

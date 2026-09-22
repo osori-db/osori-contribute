@@ -7,19 +7,24 @@ import { useQueryParam } from '@/hooks/useQueryParam'
 import { usePageSizeParam, PAGE_SIZE_OPTIONS } from '@/hooks/usePageSizeParam'
 import { useRestrictions } from '@/hooks/useRestrictions'
 import { useLicenseMapping } from '@/hooks/useLicenseMapping'
+import { usePreValidation } from '@/hooks/usePreValidation'
 import { fetchCreateLicense } from '@/lib/api-client'
 import { toLicenseCreateRequest } from '@/lib/license-mapper'
-import { validateLicenseRow } from '@/lib/license-validation'
-import { hasValidationFailure } from '@/lib/oss-validation'
+import { collectFailMessages, hasValidationFailure } from '@/lib/field-hints'
+import { buildLicenseRowHints, collectLicenseUrls } from '@/lib/pre-validation'
+import { parseMultiValue } from '@/lib/multi-value'
 import { changedFieldKeys } from '@/lib/row-diff'
 import { LICENSE_FIELD_LABELS, toFieldLabels } from '@/lib/field-labels'
 import BatchResultModal from './BatchResultModal'
 import ContributeButton from './ContributeButton'
 import EditedBadge from './EditedBadge'
+import ErrorMessage from './ErrorMessage'
 import LicenseContributeModal from './LicenseContributeModal'
+import PreValidateButton from './PreValidateButton'
 import SearchInput from './SearchInput'
 import UrlLink from './UrlLink'
 import Pagination from './Pagination'
+import ValidationBadge, { ValidationHintsRow } from './ValidationBadge'
 import type { LicenseRow, ContributeStatus } from '@/lib/types'
 
 interface LicenseListProps {
@@ -97,15 +102,12 @@ function WebpageCell({ webpage, webpageList }: { readonly webpage: string; reado
   )
 }
 
-function parseMultiValue(value: string | null): readonly string[] {
-  if (!value) return []
-  return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
-}
-
 export default function LicenseList({ rows }: LicenseListProps) {
   const { token } = useAuth()
   const { restrictions, mapNamesToIds } = useRestrictions()
-  const { hasLicense, loading: licenseMapLoading } = useLicenseMapping()
+  const { hasLicense, loading: licenseMapLoading, error: licenseMapError } = useLicenseMapping()
+  // 목록이 없으면 hasLicense 가 전부 false 라 "이미 존재함" 판정이 불가능하다.
+  const licenseRegistryUnavailable = licenseMapLoading || licenseMapError !== null
   const { query, setQuery } = useQueryParam()
   const { pageSize, setPageSize } = usePageSizeParam()
   const [statuses, setStatuses] = useState<Record<number, ContributeStatus>>({})
@@ -119,6 +121,20 @@ export default function LicenseList({ rows }: LicenseListProps) {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
   const [batchDone, setBatchDone] = useState(false)
   const [showBatchResult, setShowBatchResult] = useState(false)
+
+  const {
+    results: validationResults,
+    running: validating,
+    progress: validationProgress,
+    error: validationError,
+    validate,
+    invalidate,
+    reset: resetValidation,
+    hintsFor,
+  } = usePreValidation<LicenseRow>({
+    collectUrls: collectLicenseUrls,
+    buildHints: buildLicenseRowHints,
+  })
 
   const effectiveRows = useMemo(
     () => rows.map((row, i) => rowOverrides[i] ?? row),
@@ -143,8 +159,9 @@ export default function LicenseList({ rows }: LicenseListProps) {
     if (prevRowsRef.current === rows) return
     prevRowsRef.current = rows
     setRowOverrides({})
+    resetValidation()
     resetPage()
-  }, [rows, resetPage])
+  }, [rows, resetPage, resetValidation])
 
   const pagedRows = useMemo(() => {
     const start = (currentPage - 1) * pageSize
@@ -190,6 +207,8 @@ export default function LicenseList({ rows }: LicenseListProps) {
     const row = editedRow
     // 저장 시도 시점에 수정본을 확정한다 — 실패해도 표와 배치 기여가 수정본을 쓰게 된다.
     setRowOverrides((prev) => ({ ...prev, [index]: editedRow }))
+    // 값이 바뀌었으므로 이전 검증 결과는 더 이상 이 행을 설명하지 못한다.
+    invalidate(index)
     setSaving(true)
     setSaveError(null)
     setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
@@ -215,7 +234,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
       setStatuses((prev) => ({ ...prev, [index]: 'error' }))
       setSaving(false)
     }
-  }, [token, selectedRow, mapNamesToIds])
+  }, [token, selectedRow, mapNamesToIds, invalidate])
 
   const handleBatchContribute = useCallback(async () => {
     if (!token || batchSaving) return
@@ -236,14 +255,10 @@ export default function LicenseList({ rows }: LicenseListProps) {
         continue
       }
 
-      // 검증
-      const hints = validateLicenseRow(row)
+      // 검증 — 사전 검증을 돌렸다면 그 결과를, 아니면 오프라인 규칙만 적용한다.
+      const hints = hintsFor(row, i)
       if (hasValidationFailure(hints)) {
-        const failMessages = Object.values(hints)
-          .flat()
-          .filter((h) => h && h.status === 'fail')
-          .map((h) => h!.message)
-        setErrorMessages((prev) => ({ ...prev, [i]: failMessages.join(', ') }))
+        setErrorMessages((prev) => ({ ...prev, [i]: collectFailMessages(hints).join(', ') }))
         setStatuses((prev) => ({ ...prev, [i]: 'error' }))
         setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
         continue
@@ -283,7 +298,11 @@ export default function LicenseList({ rows }: LicenseListProps) {
 
     setBatchSaving(false)
     setBatchDone(true)
-  }, [token, filteredRows, statuses, batchSaving, mapNamesToIds, hasLicense])
+  }, [token, filteredRows, statuses, batchSaving, mapNamesToIds, hasLicense, hintsFor])
+
+  const handlePreValidate = useCallback(() => {
+    void validate(filteredRows)
+  }, [validate, filteredRows])
 
   return (
     <div className="space-y-3">
@@ -306,10 +325,19 @@ export default function LicenseList({ rows }: LicenseListProps) {
             기여 결과 보기
           </button>
         )}
+        <PreValidateButton
+          running={validating}
+          progress={validationProgress}
+          count={filteredRows.length}
+          disabled={batchSaving || licenseRegistryUnavailable || filteredRows.length === 0}
+          onClick={handlePreValidate}
+        />
         <button
           type="button"
           onClick={handleBatchContribute}
-          disabled={batchSaving || filteredRows.length === 0}
+          disabled={
+            batchSaving || validating || licenseRegistryUnavailable || filteredRows.length === 0
+          }
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {batchSaving ? (
@@ -328,6 +356,12 @@ export default function LicenseList({ rows }: LicenseListProps) {
         </button>
         </div>
       </div>
+
+      {licenseMapError && (
+        <ErrorMessage message="라이선스 목록을 불러오지 못해 중복 여부를 확인할 수 없습니다. 새로고침 후 다시 시도해주세요." />
+      )}
+
+      {validationError && <p className="text-xs text-red-500">{validationError}</p>}
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
         <table className="text-left" style={{ width: 1790, minWidth: 1790 }}>
@@ -362,6 +396,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
             {pagedRows.map(({ row, index: globalIndex }) => {
               const status = statuses[globalIndex] ?? 'idle'
               const edited = editedFields[globalIndex]
+              const validation = validationResults[globalIndex]
               // 처리가 끝난 행은 흐리게 보인다. 다만 sticky 작업 셀에 opacity를 주면
               // 가로 스크롤되는 셀이 비쳐 보이므로, 행이 아니라 데이터 셀에만 적용한다.
               const dim = status === 'success' || status === 'exists' ? 'opacity-40' : ''
@@ -379,6 +414,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
                           {row.licenseName}
                         </span>
                         {edited && <EditedBadge fields={edited} />}
+                        <ValidationBadge result={validation} />
                       </div>
                       {row.nickName && (
                         <div className="text-xs text-gray-400 truncate mt-0.5" title={row.nickName}>
@@ -421,6 +457,7 @@ export default function LicenseList({ rows }: LicenseListProps) {
                       </td>
                     </tr>
                   )}
+                  <ValidationHintsRow result={validation} colSpan={9} />
                 </Fragment>
               )
             })}

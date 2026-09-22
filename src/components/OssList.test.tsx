@@ -20,14 +20,20 @@ vi.mock('@/hooks/useAuth', () => ({
 }))
 
 const mockMapNamesToIds = vi.fn().mockReturnValue([1])
+// OSORI 마스터에 등록되어 있다고 볼 라이선스. 규칙 4 판정의 입력이다.
+let mockRegisteredLicenses = ['MIT', 'Apache-2.0']
+let mockLicenseMappingLoading = false
+let mockLicenseMappingError: string | null = null
+const mockHasLicense = (name: string) =>
+  mockRegisteredLicenses.some((known) => known.toLowerCase() === name.trim().toLowerCase())
 vi.mock('@/hooks/useLicenseMapping', () => ({
   useLicenseMapping: () => ({
     licenses: [{ id: 1, name: 'MIT', spdx_identifier: 'MIT' }],
     licenseMap: new Map([['MIT', 1], ['mit', 1]]),
-    loading: false,
-    error: null,
+    loading: mockLicenseMappingLoading,
+    error: mockLicenseMappingError,
     mapNamesToIds: (...args: unknown[]) => mockMapNamesToIds(...args),
-    hasLicense: () => false,
+    hasLicense: mockHasLicense,
   }),
 }))
 
@@ -35,11 +41,13 @@ const mockFetchOssList = vi.fn()
 const mockFetchOssVersions = vi.fn()
 const mockFetchCreateOss = vi.fn()
 const mockFetchCreateOssVersion = vi.fn()
+const mockCheckUrls = vi.fn()
 vi.mock('@/lib/api-client', () => ({
   fetchOssList: (...args: unknown[]) => mockFetchOssList(...args),
   fetchOssVersions: (...args: unknown[]) => mockFetchOssVersions(...args),
   fetchCreateOss: (...args: unknown[]) => mockFetchCreateOss(...args),
   fetchCreateOssVersion: (...args: unknown[]) => mockFetchCreateOssVersion(...args),
+  checkUrls: (...args: unknown[]) => mockCheckUrls(...args),
 }))
 
 // ─── Helpers ───
@@ -84,6 +92,18 @@ function mockPreCheckNotFound() {
   mockFetchOssList.mockResolvedValue(OSS_NOT_FOUND)
 }
 
+/** 주어진 URL 을 모두 접속 성공으로 응답한다. */
+function mockUrlsReachable() {
+  mockCheckUrls.mockImplementation((_token: string, urls: readonly string[]) =>
+    Promise.resolve({
+      success: true,
+      data: {
+        results: urls.map((url) => ({ url, outcome: 'ok', status: 200, reason: null })),
+      },
+    }),
+  )
+}
+
 beforeEach(() => {
   mockPush.mockReset()
   mockReplace.mockReset()
@@ -92,7 +112,11 @@ beforeEach(() => {
   mockFetchOssVersions.mockReset()
   mockFetchCreateOss.mockReset()
   mockFetchCreateOssVersion.mockReset()
+  mockCheckUrls.mockReset()
   mockMapNamesToIds.mockReturnValue([1])
+  mockRegisteredLicenses = ['MIT', 'Apache-2.0']
+  mockLicenseMappingLoading = false
+  mockLicenseMappingError = null
 })
 
 // ─── Tests ───
@@ -921,5 +945,246 @@ describe('OssList 페이지당 표시 개수', () => {
     await user.selectOptions(sizeSelect(), '50')
 
     expect(mockReplace).toHaveBeenCalledWith('?debug=1&q=pkg&size=50', { scroll: false })
+  })
+})
+
+describe('OssList 사전 검증', () => {
+  const preValidateButton = () => screen.getByRole('button', { name: /사전 검증/ })
+
+  it('툴바에 대상 건수를 표시하는 [사전 검증] 버튼이 있다', () => {
+    render(<OssList rows={[makeOssRow(), makeOssRow({ no: 2, ossName: 'axios' })]} />)
+
+    expect(screen.getByRole('button', { name: '사전 검증 (2건)' })).toBeInTheDocument()
+  })
+
+  it('검색 중이면 걸러진 건수만 대상으로 잡는다', () => {
+    mockSearchParams = new URLSearchParams('q=axios')
+    render(<OssList rows={[makeOssRow(), makeOssRow({ no: 2, ossName: 'axios' })]} />)
+
+    expect(screen.getByRole('button', { name: '사전 검증 (1건)' })).toBeInTheDocument()
+  })
+
+  it('검증 전에는 배지를 표시하지 않는다', () => {
+    render(<OssList rows={[makeOssRow()]} />)
+
+    expect(screen.queryByText(/검증 통과|차단|확인 필요/)).not.toBeInTheDocument()
+  })
+
+  it('URL 이 모두 접속되면 통과 배지를 표시한다', async () => {
+    const user = userEvent.setup()
+    mockUrlsReachable()
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(preValidateButton())
+
+    await waitFor(() => {
+      expect(screen.getByText('검증 통과')).toBeInTheDocument()
+    })
+    expect(mockCheckUrls).toHaveBeenCalledWith('test-token', ['https://github.com/lodash/lodash'])
+  })
+
+  it('규칙 1 — 404 URL 은 차단 배지와 사유를 표시한다', async () => {
+    const user = userEvent.setup()
+    mockCheckUrls.mockImplementation((_token: string, urls: readonly string[]) =>
+      Promise.resolve({
+        success: true,
+        data: {
+          results: urls.map((url) => ({
+            url,
+            outcome: 'unreachable',
+            status: 404,
+            reason: 'HTTP 404',
+          })),
+        },
+      }),
+    )
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(preValidateButton())
+
+    await waitFor(() => {
+      expect(screen.getByText('차단 1')).toBeInTheDocument()
+    })
+    expect(screen.getByText(/URL에 접속할 수 없습니다\(404\)/)).toBeInTheDocument()
+  })
+
+  it('규칙 1 — 403 은 차단하지 않고 확인 필요로 표시한다', async () => {
+    const user = userEvent.setup()
+    mockCheckUrls.mockImplementation((_token: string, urls: readonly string[]) =>
+      Promise.resolve({
+        success: true,
+        data: {
+          results: urls.map((url) => ({
+            url,
+            outcome: 'forbidden',
+            status: 403,
+            reason: '접근이 거부되었습니다(403)',
+          })),
+        },
+      }),
+    )
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(preValidateButton())
+
+    await waitFor(() => {
+      expect(screen.getByText('확인 필요 1')).toBeInTheDocument()
+    })
+  })
+
+  it('오프라인 규칙 위반은 URL 검사 없이도 차단으로 잡힌다', async () => {
+    const user = userEvent.setup()
+    mockUrlsReachable()
+    render(<OssList rows={[makeOssRow({ declaredLicenseList: 'FooBar-1.0' })]} />)
+
+    await user.click(preValidateButton())
+
+    await waitFor(() => {
+      expect(screen.getByText('차단 1')).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText(/OSORI에 등록되지 않은 라이선스입니다: FooBar-1\.0/),
+    ).toBeInTheDocument()
+  })
+
+  it('URL 검사에 실패하면 사유를 알리고 배지에 * 를 붙인다', async () => {
+    const user = userEvent.setup()
+    mockCheckUrls.mockResolvedValue({ success: false, error: '서버 오류' })
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(preValidateButton())
+
+    await waitFor(() => {
+      expect(screen.getByText('검증 통과*')).toBeInTheDocument()
+    })
+    expect(screen.getByText(/일부 URL을 검사하지 못했습니다: 서버 오류/)).toBeInTheDocument()
+  })
+
+  it('검증 결과가 있는 행은 [전체 기여]가 그 결과를 재사용한다', async () => {
+    const user = userEvent.setup()
+    mockCheckUrls.mockImplementation((_token: string, urls: readonly string[]) =>
+      Promise.resolve({
+        success: true,
+        data: {
+          results: urls.map((url) => ({
+            url,
+            outcome: 'unreachable',
+            status: 500,
+            reason: 'HTTP 500',
+          })),
+        },
+      }),
+    )
+    mockFetchOssList.mockResolvedValue(OSS_NOT_FOUND)
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(preValidateButton())
+    await waitFor(() => {
+      expect(screen.getByText('차단 1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: '전체 기여' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /재시도/ })).toBeInTheDocument()
+    })
+    // 배치 오류 서브행과 검증 힌트 서브행에 같은 사유가 각각 표시된다.
+    expect(screen.getAllByText(/URL에 접속할 수 없습니다\(500\)/)).toHaveLength(2)
+    // URL 접속 실패로 차단되었으므로 생성 API 는 호출되지 않는다.
+    expect(mockFetchCreateOss).not.toHaveBeenCalled()
+  })
+
+  it('라이선스 목록 로딩 중에는 [사전 검증]과 [전체 기여]를 모두 막는다', () => {
+    mockLicenseMappingLoading = true
+    render(<OssList rows={[makeOssRow()]} />)
+
+    expect(preValidateButton()).toBeDisabled()
+    expect(screen.getByRole('button', { name: '전체 기여' })).toBeDisabled()
+  })
+
+  it('라이선스 목록 조회에 실패하면 규칙 4 판정이 불가능하므로 버튼을 막고 사유를 알린다', () => {
+    // 마스터 목록이 비면 hasLicense 가 전부 false 를 돌려줘 정상 행까지 차단된다.
+    mockLicenseMappingError = '라이선스 목록 조회에 실패했습니다.'
+    mockRegisteredLicenses = []
+    render(<OssList rows={[makeOssRow()]} />)
+
+    expect(preValidateButton()).toBeDisabled()
+    expect(screen.getByRole('button', { name: '전체 기여' })).toBeDisabled()
+    expect(
+      screen.getByText(/라이선스 목록을 불러오지 못해 등록 여부를 확인할 수 없습니다/),
+    ).toBeInTheDocument()
+  })
+
+  it('라이선스 목록 조회에 실패하면 개별 기여 버튼도 막는다', () => {
+    mockLicenseMappingError = '라이선스 목록 조회에 실패했습니다.'
+    mockRegisteredLicenses = []
+    render(<OssList rows={[makeOssRow()]} />)
+
+    expect(screen.getByRole('button', { name: /기여하기/ })).toBeDisabled()
+  })
+
+  it('조회에 성공하면 사유 안내를 띄우지 않는다', () => {
+    render(<OssList rows={[makeOssRow()]} />)
+
+    expect(
+      screen.queryByText(/라이선스 목록을 불러오지 못해/),
+    ).not.toBeInTheDocument()
+  })
+
+  it('조회에 성공했다면 마스터가 비어 있어도 규칙 4는 정상 동작한다', async () => {
+    // error 게이트가 규칙 4 자체를 무력화하지 않았는지 확인한다.
+    const user = userEvent.setup()
+    mockUrlsReachable()
+    mockRegisteredLicenses = []
+    render(<OssList rows={[makeOssRow()]} />)
+
+    expect(preValidateButton()).toBeEnabled()
+    await user.click(preValidateButton())
+
+    await waitFor(() => {
+      expect(screen.getByText('차단 1')).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText(/OSORI에 등록되지 않은 라이선스입니다: MIT/),
+    ).toBeInTheDocument()
+  })
+
+  it('대상 행이 없으면 버튼을 막는다', () => {
+    mockSearchParams = new URLSearchParams('q=nothing-matches')
+    render(<OssList rows={[makeOssRow()]} />)
+
+    expect(preValidateButton()).toBeDisabled()
+  })
+
+  it('행을 수정하면 그 행의 검증 결과를 버린다', async () => {
+    const user = userEvent.setup()
+    mockUrlsReachable()
+    mockPreCheckNotFound()
+    mockFetchCreateOss.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 200, name: 'lodash', purl: '', reviewed: 0 },
+    })
+    mockFetchOssVersions.mockResolvedValue(VERSION_NOT_FOUND)
+    mockFetchCreateOssVersion.mockResolvedValue({ success: true, data: { oss_version_id: 1 } })
+
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(preValidateButton())
+    await waitFor(() => {
+      expect(screen.getByText('검증 통과')).toBeInTheDocument()
+    })
+
+    const contributeBtn = screen
+      .getAllByRole('button')
+      .find((b) => b.textContent?.includes('기여하기'))
+    await user.click(contributeBtn!)
+    await waitFor(() => {
+      expect(screen.getByText('OSS 기여하기')).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('검증 통과')).not.toBeInTheDocument()
+    })
   })
 })

@@ -32,7 +32,10 @@ function makeOssRow(overrides: Partial<OssRow> = {}): OssRow {
 
 const licenseMap = new Map<string, number>([['MIT', 1]])
 
-function renderModal(row: OssRow, onSave = vi.fn()) {
+/** OSORI 마스터에 등록된 라이선스. licenseMap 과 같은 집합을 본다. */
+const isRegisteredLicense = (name: string) => licenseMap.has(name.trim())
+
+function renderModal(row: OssRow, onSave = vi.fn(), isRegistered = isRegisteredLicense) {
   render(
     <OssContributeModal
       open
@@ -42,6 +45,7 @@ function renderModal(row: OssRow, onSave = vi.fn()) {
       saving={false}
       licenseMap={licenseMap}
       licenseMappingLoading={false}
+      isRegisteredLicense={isRegistered}
     />,
   )
   return { onSave }
@@ -154,6 +158,99 @@ describe('OssContributeModal 편집', () => {
   })
 
   it('추가 정보를 펼치면 전송되지만 숨겨져 있던 필드를 편집할 수 있다', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal(makeOssRow())
+
+    expect(screen.queryByLabelText('Attribution')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /추가 정보/ }))
+    await user.type(screen.getByLabelText('Attribution'), 'Copyright notice')
+    await user.click(saveButton())
+
+    expect(onSave.mock.calls[0][0].attribution).toBe('Copyright notice')
+  })
+})
+
+// 경로 1: 모달 개별 저장에도 사전 검증 규칙이 걸린다.
+describe('OssContributeModal 사전 검증 규칙', () => {
+  it('규칙 2 — 스킴 없는 Download Location 은 저장을 막는다', async () => {
+    const user = userEvent.setup()
+    renderModal(makeOssRow())
+
+    const download = screen.getByLabelText('Download Location')
+    await user.clear(download)
+    await user.type(download, 'github.com/lodash/lodash')
+
+    expect(
+      screen.getByText(/Download location은 http\/https URL이어야 합니다\./),
+    ).toBeInTheDocument()
+    expect(saveButton()).toBeDisabled()
+  })
+
+  it('규칙 4 — 미등록 라이선스는 저장을 막는다', () => {
+    renderModal(makeOssRow({ declaredLicenseList: 'MIT, FooBar-1.0' }))
+
+    expect(
+      screen.getByText(/OSORI에 등록되지 않은 라이선스입니다: FooBar-1\.0/),
+    ).toBeInTheDocument()
+    expect(saveButton()).toBeDisabled()
+  })
+
+  it('규칙 6 — declared 와 detected 중복은 저장을 막는다 (대소문자·공백 무시)', () => {
+    renderModal(makeOssRow({ declaredLicenseList: 'MIT', detectedLicenseList: 'mit ' }))
+
+    expect(
+      screen.getAllByText(/declared와 detected에 같은 라이선스가 중복 등록되었습니다: MIT/),
+    ).toHaveLength(2)
+    expect(saveButton()).toBeDisabled()
+  })
+
+  it('규칙 5 — git hash version 은 저장을 막는다', async () => {
+    const user = userEvent.setup()
+    renderModal(makeOssRow())
+
+    await user.clear(screen.getByLabelText('Version'))
+    await user.type(screen.getByLabelText('Version'), 'a1b2c3d')
+
+    expect(screen.getByText(/Git hash 값은 버전으로 사용할 수 없습니다\./)).toBeInTheDocument()
+    expect(saveButton()).toBeDisabled()
+  })
+
+  it('규칙 위반을 고치면 저장이 다시 열린다', async () => {
+    const user = userEvent.setup()
+    renderModal(makeOssRow({ declaredLicenseList: 'FooBar-1.0' }))
+
+    expect(saveButton()).toBeDisabled()
+
+    const declared = screen.getByLabelText('Declared License')
+    await user.clear(declared)
+    await user.type(declared, 'MIT')
+
+    expect(saveButton()).toBeEnabled()
+  })
+
+  it('URL 접속 검사는 모달에서 수행하지 않는다 (오프라인 규칙만)', () => {
+    renderModal(makeOssRow({ downloadLocation: 'https://github.com/lodash/lodash' }))
+
+    expect(screen.queryByText(/URL에 접속할 수 없습니다/)).not.toBeInTheDocument()
+    expect(saveButton()).toBeEnabled()
+  })
+
+  it('downloadLocationList 후보 URL 아래에 힌트 자리를 둔다', () => {
+    renderModal(
+      makeOssRow({
+        downloadLocation: 'https://npmjs.com/package/lodash',
+        downloadLocationList: 'https://github.com/lodash/lodash',
+      }),
+    )
+
+    // 대표 URL 이 GitHub 이 아닐 때의 권고 힌트는 downloadLocation 필드에 붙는다.
+    expect(screen.getByText(/GitHub repository를 대표 URL로 권장합니다\./)).toBeInTheDocument()
+  })
+})
+
+describe('OssContributeModal 추가 정보', () => {
+  it('펼친 필드를 편집하면 저장 시 함께 전달된다', async () => {
     const user = userEvent.setup()
     const { onSave } = renderModal(makeOssRow())
 

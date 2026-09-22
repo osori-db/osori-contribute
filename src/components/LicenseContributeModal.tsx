@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Modal from './Modal'
 import { CheckboxField, TextAreaField, TextField } from './FormField'
-import { validateLicenseRow } from '@/lib/license-validation'
-import { hasValidationFailure } from '@/lib/oss-validation'
+import { hasValidationFailure } from '@/lib/field-hints'
+import { buildLicenseRowHints } from '@/lib/pre-validation'
 import { parseMultiValue } from '@/lib/multi-value'
 import type { LicenseRow } from '@/lib/types'
 import type { OsoriRestriction } from '@/lib/osori-types'
@@ -51,7 +51,7 @@ export default function LicenseContributeModal({
   const restrictionNames = parseMultiValue(draft.restriction)
 
   // 검증은 원본이 아니라 초안 기준이다 — 사용자가 고치면 즉시 반영되어야 한다.
-  const hints = useMemo(() => validateLicenseRow(draft), [draft])
+  const hints = useMemo(() => buildLicenseRowHints(draft), [draft])
   const hasFail = useMemo(() => hasValidationFailure(hints), [hints])
 
   const restrictionMapping = useMemo(() => {

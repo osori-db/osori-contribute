@@ -6,27 +6,30 @@ import { useLicenseMapping } from '@/hooks/useLicenseMapping'
 import { usePageParam } from '@/hooks/usePageParam'
 import { useQueryParam } from '@/hooks/useQueryParam'
 import { usePageSizeParam, PAGE_SIZE_OPTIONS } from '@/hooks/usePageSizeParam'
+import { usePreValidation } from '@/hooks/usePreValidation'
 import { fetchOssList, fetchOssVersions, fetchCreateOss, fetchCreateOssVersion } from '@/lib/api-client'
 import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from '@/lib/oss-mapper'
-import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
+import { collectFailMessages, hasValidationFailure } from '@/lib/field-hints'
+import { buildOssRowHints, collectOssUrls } from '@/lib/pre-validation'
+import { parseMultiValue } from '@/lib/multi-value'
 import { changedFieldKeys } from '@/lib/row-diff'
 import { OSS_FIELD_LABELS, toFieldLabels } from '@/lib/field-labels'
 import BatchResultModal from './BatchResultModal'
 import ContributeButton from './ContributeButton'
 import EditedBadge from './EditedBadge'
+import ErrorMessage from './ErrorMessage'
 import OssContributeModal from './OssContributeModal'
+import PreValidateButton from './PreValidateButton'
 import SearchInput from './SearchInput'
 import UrlLink from './UrlLink'
 import Pagination from './Pagination'
+import ValidationBadge, { ValidationHintsRow } from './ValidationBadge'
+import type { IsRegisteredLicense } from '@/lib/license-registry-validation'
+import type { UrlCheckMap } from '@/lib/pre-validation'
 import type { OssRow, ContributeStatus } from '@/lib/types'
 
 interface OssListProps {
   readonly rows: readonly OssRow[]
-}
-
-function parseMultiValue(value: string | null): readonly string[] {
-  if (!value) return []
-  return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
 }
 
 function LicenseBadges({ value }: { readonly value: string | null }) {
@@ -58,9 +61,41 @@ export default function OssList({ rows }: OssListProps) {
   const [batchDone, setBatchDone] = useState(false)
   const [showBatchResult, setShowBatchResult] = useState(false)
 
-  const { licenseMap, loading: licenseMappingLoading, mapNamesToIds: mapLicenseNamesToIds } = useLicenseMapping()
+  const {
+    licenseMap,
+    loading: licenseMappingLoading,
+    error: licenseMappingError,
+    mapNamesToIds: mapLicenseNamesToIds,
+    hasLicense,
+  } = useLicenseMapping()
+  // 마스터 목록이 없으면 hasLicense 가 전부 false 를 돌려주므로 규칙 4가 정상 행까지 막는다.
+  // 로딩 중이든 조회 실패든 판정 자체가 불가능한 상태이므로 검증·기여를 열어두지 않는다.
+  const licenseRegistryUnavailable = licenseMappingLoading || licenseMappingError !== null
+
+  // 목록을 못 불러온 상태에서 "미등록" 이라고 단정할 수는 없다 — 규칙 4 자체를 비활성화한다.
+  const isRegisteredLicense = useCallback<IsRegisteredLicense>(
+    (spdxOrName) => (licenseMappingError !== null ? true : hasLicense(spdxOrName)),
+    [hasLicense, licenseMappingError],
+  )
   const { query, setQuery } = useQueryParam()
   const { pageSize, setPageSize } = usePageSizeParam()
+
+  // 규칙 4(라이선스 등록 여부)는 마스터 목록에 의존하므로 판정 함수가 바뀌면 힌트도 다시 만든다.
+  const buildHints = useCallback(
+    (row: OssRow, urlResults?: UrlCheckMap) =>
+      buildOssRowHints(row, isRegisteredLicense, urlResults),
+    [isRegisteredLicense],
+  )
+  const {
+    results: validationResults,
+    running: validating,
+    progress: validationProgress,
+    error: validationError,
+    validate,
+    invalidate,
+    reset: resetValidation,
+    hintsFor,
+  } = usePreValidation<OssRow>({ collectUrls: collectOssUrls, buildHints })
 
   const effectiveRows = useMemo(
     () => rows.map((row, i) => rowOverrides[i] ?? row),
@@ -85,8 +120,9 @@ export default function OssList({ rows }: OssListProps) {
     if (prevRowsRef.current === rows) return
     prevRowsRef.current = rows
     setRowOverrides({})
+    resetValidation()
     resetPage()
-  }, [rows, resetPage])
+  }, [rows, resetPage, resetValidation])
 
   const pagedRows = useMemo(() => {
     const start = (currentPage - 1) * pageSize
@@ -163,6 +199,8 @@ export default function OssList({ rows }: OssListProps) {
     const row = editedRow
     // 저장 시도 시점에 수정본을 확정한다 — 실패해도 표와 배치 기여가 수정본을 쓰게 된다.
     setRowOverrides((prev) => ({ ...prev, [index]: editedRow }))
+    // 값이 바뀌었으므로 이전 검증 결과는 더 이상 이 행을 설명하지 못한다.
+    invalidate(index)
     setSaving(true)
     setSaveError(null)
     setStatuses((prev) => ({ ...prev, [index]: 'loading' }))
@@ -226,7 +264,7 @@ export default function OssList({ rows }: OssListProps) {
       setStatuses((prev) => ({ ...prev, [index]: 'error' }))
       setSaving(false)
     }
-  }, [token, selectedRow, mapLicenseNamesToIds])
+  }, [token, selectedRow, mapLicenseNamesToIds, invalidate])
 
   const handleBatchContribute = useCallback(async () => {
     if (!token || batchSaving) return
@@ -247,14 +285,10 @@ export default function OssList({ rows }: OssListProps) {
         continue
       }
 
-      // 검증
-      const hints = validateOssRow(row)
+      // 검증 — 사전 검증을 돌렸다면 그 결과를, 아니면 오프라인 규칙만 적용한다.
+      const hints = hintsFor(row, i)
       if (hasValidationFailure(hints)) {
-        const failMessages = Object.values(hints)
-          .flat()
-          .filter((h) => h && h.status === 'fail')
-          .map((h) => h!.message)
-        setErrorMessages((prev) => ({ ...prev, [i]: failMessages.join(', ') }))
+        setErrorMessages((prev) => ({ ...prev, [i]: collectFailMessages(hints).join(', ') }))
         setStatuses((prev) => ({ ...prev, [i]: 'error' }))
         setBatchProgress((prev) => ({ ...prev, current: prev.current + 1 }))
         continue
@@ -339,7 +373,11 @@ export default function OssList({ rows }: OssListProps) {
 
     setBatchSaving(false)
     setBatchDone(true)
-  }, [token, filteredRows, statuses, batchSaving, mapLicenseNamesToIds])
+  }, [token, filteredRows, statuses, batchSaving, mapLicenseNamesToIds, hintsFor])
+
+  const handlePreValidate = useCallback(() => {
+    void validate(filteredRows)
+  }, [validate, filteredRows])
 
   return (
     <div className="space-y-3">
@@ -362,10 +400,19 @@ export default function OssList({ rows }: OssListProps) {
             기여 결과 보기
           </button>
         )}
+        <PreValidateButton
+          running={validating}
+          progress={validationProgress}
+          count={filteredRows.length}
+          disabled={batchSaving || licenseRegistryUnavailable || filteredRows.length === 0}
+          onClick={handlePreValidate}
+        />
         <button
           type="button"
           onClick={handleBatchContribute}
-          disabled={batchSaving || filteredRows.length === 0}
+          disabled={
+            batchSaving || validating || licenseRegistryUnavailable || filteredRows.length === 0
+          }
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {batchSaving ? (
@@ -384,6 +431,12 @@ export default function OssList({ rows }: OssListProps) {
         </button>
         </div>
       </div>
+
+      {licenseMappingError && (
+        <ErrorMessage message="라이선스 목록을 불러오지 못해 등록 여부를 확인할 수 없습니다. 새로고침 후 다시 시도해주세요." />
+      )}
+
+      {validationError && <p className="text-xs text-red-500">{validationError}</p>}
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 scrollbar-visible">
         <table className="text-left" style={{ width: 1268, minWidth: 1268 }}>
@@ -413,6 +466,7 @@ export default function OssList({ rows }: OssListProps) {
               const status = statuses[globalIndex] ?? 'idle'
               const errorMsg = errorMessages[globalIndex]
               const edited = editedFields[globalIndex]
+              const validation = validationResults[globalIndex]
               // 처리가 끝난 행은 흐리게 보인다. 다만 sticky 작업 셀에 opacity를 주면
               // 가로 스크롤되는 셀이 비쳐 보이므로, 행이 아니라 데이터 셀에만 적용한다.
               const dim = status === 'success' || status === 'exists' ? 'opacity-40' : ''
@@ -430,6 +484,7 @@ export default function OssList({ rows }: OssListProps) {
                           {row.ossName}
                         </span>
                         {edited && <EditedBadge fields={edited} />}
+                        <ValidationBadge result={validation} />
                       </div>
                       {(row.version || row.nickname) && (
                       <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
@@ -484,7 +539,8 @@ export default function OssList({ rows }: OssListProps) {
                     <td className="sticky right-0 z-10 bg-inherit border-l border-gray-200 px-3 py-2.5 text-center">
                       <ContributeButton
                         status={status}
-                        disabled={batchSaving}
+                        // 마스터 목록 없이 저장하면 라이선스가 조용히 누락되므로 모달을 열지 않는다.
+                        disabled={batchSaving || licenseMappingError !== null}
                         onClick={() => handleOpenModal(globalIndex, row)}
                       />
                     </td>
@@ -496,6 +552,7 @@ export default function OssList({ rows }: OssListProps) {
                       </td>
                     </tr>
                   )}
+                  <ValidationHintsRow result={validation} colSpan={6} />
                 </Fragment>
               )
             })}
@@ -522,6 +579,7 @@ export default function OssList({ rows }: OssListProps) {
           saveError={saveError}
           licenseMap={licenseMap}
           licenseMappingLoading={licenseMappingLoading}
+          isRegisteredLicense={isRegisteredLicense}
         />
       )}
 

@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Modal from './Modal'
-import { TextAreaField, TextField } from './FormField'
-import { validateOssRow, hasValidationFailure } from '@/lib/oss-validation'
+import { FieldHintsView, TextAreaField, TextField } from './FormField'
+import { hasValidationFailure } from '@/lib/field-hints'
+import { buildOssRowHints } from '@/lib/pre-validation'
 import { parseMultiValue } from '@/lib/multi-value'
+import type { IsRegisteredLicense } from '@/lib/license-registry-validation'
 import type { OssRow } from '@/lib/types'
 
 interface OssContributeModalProps {
@@ -16,6 +18,8 @@ interface OssContributeModalProps {
   readonly saveError?: string | null
   readonly licenseMap: ReadonlyMap<string, number>
   readonly licenseMappingLoading: boolean
+  /** OSORI 마스터 라이선스 조회. 규칙 4(등록 여부) 판정에 쓴다. */
+  readonly isRegisteredLicense: IsRegisteredLicense
 }
 
 /** 빈 입력은 null로 되돌린다 — 원본 타입이 `string | null`인 필드의 의미를 유지하기 위함이다. */
@@ -55,6 +59,7 @@ export default function OssContributeModal({
   saveError,
   licenseMap,
   licenseMappingLoading,
+  isRegisteredLicense,
 }: OssContributeModalProps) {
   const [draft, setDraft] = useState<OssRow>(row)
   const [showExtra, setShowExtra] = useState(false)
@@ -69,7 +74,11 @@ export default function OssContributeModal({
   const downloadLocations = parseMultiValue(draft.downloadLocationList)
 
   // 검증은 원본이 아니라 초안 기준이다 — 사용자가 고치면 즉시 반영되어야 한다.
-  const hints = useMemo(() => validateOssRow(draft), [draft])
+  // URL 접속 검사 결과는 넘기지 않는다 — 모달에서는 오프라인 규칙만 적용한다.
+  const hints = useMemo(
+    () => buildOssRowHints(draft, isRegisteredLicense),
+    [draft, isRegisteredLicense],
+  )
   const hasFail = useMemo(() => hasValidationFailure(hints), [hints])
 
   const lookupLicenseId = useCallback(
@@ -177,6 +186,7 @@ export default function OssContributeModal({
               ))}
             </div>
           )}
+          <FieldHintsView hints={hints} field="downloadLocationList" />
         </div>
 
         <TextField
