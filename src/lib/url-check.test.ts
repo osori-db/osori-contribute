@@ -68,11 +68,24 @@ describe('isBlockedHost 내부 주소 차단', () => {
  * 사설 대역만 골라내지 않고 이 표기 자체를 차단한다.
  */
 describe('isBlockedHost IPv4-mapped IPv6 차단 (회귀)', () => {
+  // 이번 수정의 핵심 경로: URL 파서가 정규화해 넘기는 16진 표기를 직접 넣어도 잡혀야 한다.
+  const normalizedHex = [
+    '::ffff:7f00:1', // ::ffff:127.0.0.1
+    '::ffff:a9fe:a9fe', // ::ffff:169.254.169.254 (클라우드 메타데이터)
+    '::ffff:a00:1', // ::ffff:10.0.0.1
+    '::ffff:ac10:1', // ::ffff:172.16.0.1
+    '::ffff:c0a8:1', // ::ffff:192.168.0.1
+  ]
+
+  it.each(normalizedHex)('파서가 정규화한 16진 표기 %s 를 차단한다', (hostname) => {
+    expect(isBlockedHost(hostname)).toBe(true)
+  })
+
   const mapped = [
-    // URL 파서가 정규화한 16진 표기 — 실제 isBlockedHost 에 들어오는 형태다.
-    '[::ffff:7f00:1]', // ::ffff:127.0.0.1
-    '[::ffff:a9fe:a9fe]', // ::ffff:169.254.169.254 (클라우드 메타데이터)
-    '[::ffff:a00:1]', // ::ffff:10.0.0.1
+    // 대괄호가 붙은 형태 (URL.hostname 이 실제로 돌려주는 값)
+    '[::ffff:7f00:1]',
+    '[::ffff:a9fe:a9fe]',
+    '[::ffff:a00:1]',
     '[::ffff:ac1f:5]', // ::ffff:172.31.0.5
     '[::ffff:c0a8:101]', // ::ffff:192.168.1.1
     '[::ffff:808:808]', // ::ffff:8.8.8.8 — 공인 IP 라도 이 표기는 막는다
@@ -81,6 +94,8 @@ describe('isBlockedHost IPv4-mapped IPv6 차단 (회귀)', () => {
     // 점 표기도 같이 받는다.
     '::ffff:127.0.0.1',
     '::ffff:169.254.169.254',
+    '::ffff:172.16.0.1',
+    '::ffff:192.168.0.1',
     '::ffff:0:127.0.0.1',
   ]
 
@@ -94,17 +109,34 @@ describe('isBlockedHost IPv4-mapped IPv6 차단 (회귀)', () => {
     expect(isBlockedHost(hostname)).toBe(false)
   })
 
-  it('URL 단위로도 IPv4-mapped 리터럴을 검사 대상에서 제외한다', () => {
-    expect(isCheckableUrl('http://[::ffff:169.254.169.254]/latest/meta-data/')).toBe(false)
-    expect(isCheckableUrl('http://[::ffff:127.0.0.1]:8080/admin')).toBe(false)
-    expect(isCheckableUrl('http://[::ffff:10.0.0.1]/')).toBe(false)
-    expect(isCheckableUrl('http://[::a00:1]/')).toBe(false)
+  const bypassUrls = [
+    'http://[::ffff:127.0.0.1]/',
+    'http://[::ffff:169.254.169.254]/',
+    'http://[::ffff:169.254.169.254]/latest/meta-data/',
+    'http://[::ffff:10.0.0.1]/',
+    'http://[::ffff:192.168.0.1]/',
+    'http://[::ffff:172.16.0.1]/',
+    'http://[::ffff:127.0.0.1]:8080/admin',
+    'http://[::a00:1]/',
+    'http://[0:0:0:0:0:0:0:1]/',
+    'http://[::1]/',
+  ]
+
+  it.each(bypassUrls)('URL 단위로도 %s 를 검사 대상에서 제외한다', (url) => {
+    expect(isCheckableUrl(url)).toBe(false)
   })
 
-  it('정상 URL 은 계속 검사 대상이다 (오탐 방지)', () => {
-    expect(isCheckableUrl('http://[2606:4700::1111]/')).toBe(true)
-    expect(isCheckableUrl('https://github.com/foo/bar')).toBe(true)
-    expect(isCheckableUrl('http://8.8.8.8/')).toBe(true)
+  const allowedUrls = [
+    'https://github.com/foo/bar',
+    'http://example.com',
+    // 공개 IPv6. fc00::/7·fe80::/10 패턴이나 IPv4-mapped 판정에 걸리면 안 된다.
+    'https://[2606:4700::1111]/',
+    'http://[2606:4700::1111]/',
+    'http://8.8.8.8/',
+  ]
+
+  it.each(allowedUrls)('정상 URL %s 은 계속 검사 대상이다 (과차단 회귀 방지)', (url) => {
+    expect(isCheckableUrl(url)).toBe(true)
   })
 })
 

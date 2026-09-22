@@ -31,12 +31,13 @@ vi.mock('@/hooks/useRestrictions', () => ({
 
 const mockHasLicense = vi.fn().mockReturnValue(false)
 let mockLicenseMappingLoading = false
+let mockLicenseMappingError: string | null = null
 vi.mock('@/hooks/useLicenseMapping', () => ({
   useLicenseMapping: () => ({
     licenses: [],
     licenseMap: new Map(),
     loading: mockLicenseMappingLoading,
-    error: null,
+    error: mockLicenseMappingError,
     mapNamesToIds: vi.fn().mockReturnValue([]),
     hasLicense: (...args: unknown[]) => mockHasLicense(...args),
   }),
@@ -88,6 +89,7 @@ beforeEach(() => {
   mockMapNamesToIds.mockReturnValue([26])
   mockHasLicense.mockReturnValue(false)
   mockLicenseMappingLoading = false
+  mockLicenseMappingError = null
 })
 
 // ─── Tests ───
@@ -630,6 +632,23 @@ describe('LicenseList 사전 검증', () => {
 
     expect(preValidateButton()).toBeDisabled()
     expect(screen.getByRole('button', { name: '전체 기여' })).toBeDisabled()
+  })
+
+  it('라이선스 목록 조회에 실패하면 중복 판정이 불가능하므로 버튼을 막고 사유를 알린다', () => {
+    mockLicenseMappingError = '라이선스 목록 조회에 실패했습니다.'
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+
+    expect(preValidateButton()).toBeDisabled()
+    expect(screen.getByRole('button', { name: '전체 기여' })).toBeDisabled()
+    expect(
+      screen.getByText(/라이선스 목록을 불러오지 못해 중복 여부를 확인할 수 없습니다/),
+    ).toBeInTheDocument()
+  })
+
+  it('조회에 성공하면 사유 안내를 띄우지 않는다', () => {
+    render(<LicenseList rows={[makeLicenseRow()]} />)
+
+    expect(screen.queryByText(/라이선스 목록을 불러오지 못해/)).not.toBeInTheDocument()
   })
 
   it('검사 대상 URL 이 없으면 요청 없이 오프라인 규칙만 반영한다', async () => {
