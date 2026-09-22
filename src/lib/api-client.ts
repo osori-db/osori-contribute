@@ -10,6 +10,7 @@ import type {
   OsoriOssVersionCreateRequest,
   OsoriOssVersionCreateSimpleResponse,
 } from './osori-types'
+import type { UrlCheckData } from './url-check'
 
 async function apiFetch<T>(
   path: string,
@@ -157,6 +158,18 @@ export async function fetchCreateOssVersion(
   return apiFetch<OsoriOssVersionCreateSimpleResponse>('/api/osori/oss-versions', token, {
     method: 'POST',
     body: JSON.stringify(data),
+  })
+}
+
+// ─── URL 접속 검사 ───
+
+export async function checkUrls(
+  token: string,
+  urls: readonly string[],
+): Promise<ApiResponse<UrlCheckData>> {
+  return apiFetch<UrlCheckData>('/api/url-check', token, {
+    method: 'POST',
+    body: JSON.stringify({ urls }),
   })
 }
 
