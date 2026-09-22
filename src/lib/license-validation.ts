@@ -1,20 +1,8 @@
 import type { LicenseRow } from './types'
-import type { FieldHints, ValidationStatus } from './oss-validation'
-
-function addHint(
-  hints: Record<string, { status: ValidationStatus; message: string }[]>,
-  field: string,
-  status: ValidationStatus,
-  message: string,
-): void {
-  if (!hints[field]) {
-    hints[field] = []
-  }
-  hints[field].push({ status, message })
-}
+import { addHint, type FieldHints, type HintAccumulator } from './field-hints'
 
 export function validateLicenseRow(row: LicenseRow): FieldHints {
-  const hints: Record<string, { status: ValidationStatus; message: string }[]> = {}
+  const hints: HintAccumulator = {}
 
   // 1. License Name 정제
   if (!row.licenseName?.trim()) {

@@ -1,18 +1,11 @@
 import type { OssRow } from './types'
+import { addHint, type FieldHints, type HintAccumulator } from './field-hints'
+import { parseMultiValue } from './multi-value'
+import { isSafeHttpUrl } from './url'
 
-export type ValidationStatus = 'fail' | 'warn' | 'info'
-
-export interface FieldHint {
-  readonly status: ValidationStatus
-  readonly message: string
-}
-
-export type FieldHints = Partial<Record<string, readonly FieldHint[]>>
-
-function parseMultiValue(value: string | null): readonly string[] {
-  if (!value) return []
-  return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
-}
+// 타입과 판정 헬퍼의 정규 위치는 field-hints.ts 다. 기존 import 사이트 호환을 위해 여기서 re-export 한다.
+export type { ValidationStatus, FieldHint, FieldHints } from './field-hints'
+export { hasValidationFailure } from './field-hints'
 
 function hasVersionPrefix(version: string): boolean {
   return /^[vV](?:er(?:sion)?\.?\s*)?/i.test(version)
@@ -26,25 +19,27 @@ function hasSemverPreRelease(version: string): boolean {
   return /^\d+\.\d+\.\d+-.+$/.test(version)
 }
 
-function addHint(
-  hints: Record<string, FieldHint[]>,
-  field: string,
-  status: ValidationStatus,
-  message: string,
-): void {
-  if (!hints[field]) {
-    hints[field] = []
-  }
-  hints[field].push({ status, message })
+/** declared 와 detected 에 같은 이름이 들어간 경우를 찾는다. trim + 대소문자 무시 비교. */
+function findDuplicateLicenses(row: OssRow): readonly string[] {
+  const declared = parseMultiValue(row.declaredLicenseList)
+  const detectedKeys = new Set(
+    parseMultiValue(row.detectedLicenseList).map((name) => name.toLowerCase()),
+  )
+
+  const duplicates = declared.filter((name) => detectedKeys.has(name.toLowerCase()))
+  return Array.from(new Set(duplicates))
 }
 
 export function validateOssRow(row: OssRow): FieldHints {
-  const hints: Record<string, FieldHint[]> = {}
+  const hints: HintAccumulator = {}
   const declaredLicenses = parseMultiValue(row.declaredLicenseList)
 
   // 1. Download location 존재 여부
   if (!row.downloadLocation?.trim()) {
     addHint(hints, 'downloadLocation', 'fail', 'Download location은 필수 항목입니다.')
+  } else if (!isSafeHttpUrl(row.downloadLocation)) {
+    // 2. Download location URL 형식
+    addHint(hints, 'downloadLocation', 'fail', 'Download location은 http/https URL이어야 합니다.')
   }
 
   // 1. Declared License 존재 여부
@@ -64,6 +59,14 @@ export function validateOssRow(row: OssRow): FieldHints {
     if (hasSemverPreRelease(version)) {
       addHint(hints, 'version', 'warn', 'Pre-release 버전입니다. 정식 릴리즈 버전을 확인해주세요.')
     }
+  }
+
+  // 4. declared / detected 중복 금지
+  const duplicates = findDuplicateLicenses(row)
+  if (duplicates.length > 0) {
+    const message = `declared와 detected에 같은 라이선스가 중복 등록되었습니다: ${duplicates.join(', ')}`
+    addHint(hints, 'declaredLicense', 'fail', message)
+    addHint(hints, 'detectedLicense', 'fail', message)
   }
 
   // 5. License combination
@@ -91,10 +94,4 @@ export function validateOssRow(row: OssRow): FieldHints {
   }
 
   return hints
-}
-
-export function hasValidationFailure(hints: FieldHints): boolean {
-  return Object.values(hints).some(
-    (fieldHints) => fieldHints?.some((h) => h.status === 'fail'),
-  )
 }
