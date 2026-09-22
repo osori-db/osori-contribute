@@ -72,10 +72,11 @@ export default function OssList({ rows }: OssListProps) {
   // 로딩 중이든 조회 실패든 판정 자체가 불가능한 상태이므로 검증·기여를 열어두지 않는다.
   const licenseRegistryUnavailable = licenseMappingLoading || licenseMappingError !== null
 
-  // 목록을 못 불러온 상태에서 "미등록" 이라고 단정할 수는 없다 — 규칙 4 자체를 비활성화한다.
+  // 목록이 아직 없는 상태(로딩 중·조회 실패)에서 "미등록" 이라고 단정할 수는 없다.
+  // 이 경우 규칙 4 자체를 비활성화한다 — 저장은 모달이 licenseMappingLoading 으로 따로 잠근다.
   const isRegisteredLicense = useCallback<IsRegisteredLicense>(
-    (spdxOrName) => (licenseMappingError !== null ? true : hasLicense(spdxOrName)),
-    [hasLicense, licenseMappingError],
+    (spdxOrName) => (licenseRegistryUnavailable ? true : hasLicense(spdxOrName)),
+    [hasLicense, licenseRegistryUnavailable],
   )
   const { query, setQuery } = useQueryParam()
   const { pageSize, setPageSize } = usePageSizeParam()
