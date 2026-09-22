@@ -260,7 +260,7 @@ URL은 사용자가 올린 엑셀에서 오므로 신뢰할 수 없습니다. `h
 - 행을 수정하면 그 행의 결과는 버려지고, 새 파일을 올리면 전부 초기화됩니다.
 - "전체 기여"는 저장된 검증 결과를 재사용합니다. 검증하지 않은 행에는 규칙 2·3·4·5·6(오프라인)만 적용하고
   URL 접속 검사는 건너뜁니다. 개별 기여 모달도 같은 오프라인 규칙을 적용해 `차단` 상태에서는 저장을 막습니다.
-- 라이선스 마스터 목록을 불러오는 동안에는 규칙 4의 판정이 뒤집히므로 두 버튼 모두 비활성화됩니다.
+- 라이선스 마스터 목록을 불러오는 중이거나 조회에 실패하면 등록 여부(OSS) · 중복 여부(License) 판정이 불가능하므로 두 버튼을 비활성화하고 사유를 안내합니다. 이때 규칙 4는 "미등록" 이라고 단정하지 않습니다 — 목록이 없는 것과 등록되지 않은 것은 다릅니다.
 - URL 검사 결과는 세션 동안 URL 단위로 캐시되어 같은 주소를 다시 요청하지 않습니다.
 
 ## 프로젝트 구조
@@ -399,7 +399,7 @@ http/https 스킴만 허용, 내부·사설 주소 차단, 리다이렉트 미�
 
 ## 테스트
 
-20개 테스트 파일, 총 431개 테스트 케이스:
+20개 테스트 파일, 총 455개 테스트 케이스:
 
 | 파일 | 테스트 수 | 설명 |
 |------|-----------|------|
@@ -411,7 +411,7 @@ http/https 스킴만 허용, 내부·사설 주소 차단, 리다이렉트 미�
 | `lib/oss-validation.test.ts` | 21 | OSS 검증 규칙 (URL 형식·version·declared/detected 중복) |
 | `lib/license-registry-validation.test.ts` | 8 | 라이선스 OSORI 등록 여부 검증 |
 | `lib/pre-validation.test.ts` | 28 | 오프라인 규칙 + URL 결과 합성, 행별 URL 수집 |
-| `lib/url-check.test.ts` | 80 | 내부 주소 차단(IPv4-mapped IPv6·비표준 IPv4 표기 포함), 검사 가능 URL 판정, 힌트 매핑 |
+| `lib/url-check.test.ts` | 100 | 내부 주소 차단(IPv4-mapped IPv6·비표준 IPv4 표기 포함), 검사 가능 URL 판정, 힌트 매핑 |
 | `lib/url-reachability.test.ts` | 33 | 상태코드 판정, HEAD→GET 폴백, 타임아웃, 동시성 (fetch 모킹) |
 | `app/api/url-check/route.test.ts` | 15 | 401/400/200 응답, 개수 상한, 응답 누출 방지 |
 | `hooks/useLicenseMapping.test.ts` | 9 | 라이선스 이름→ID 매핑 훅 |
@@ -421,8 +421,8 @@ http/https 스킴만 허용, 내부·사설 주소 차단, 리다이렉트 미�
 | `components/PreValidateButton.test.tsx` | 6 | 버튼 라벨·진행률·비활성화 |
 | `components/OssContributeModal.test.tsx` | 17 | OSS 모달 편집 + 사전 검증 규칙으로 인한 저장 차단 |
 | `components/LicenseContributeModal.test.tsx` | 9 | 라이선스 모달 편집 (초안·검증·Restriction 추가) |
-| `components/LicenseList.test.tsx` | 29 | 라이선스 기여 흐름, 검색, 표시 개수, Webpage 링크, 사전 검증 |
-| `components/OssList.test.tsx` | 74 | OSS 기여 흐름, 테이블 구성, 검색, 페이징, 링크, 수정본 반영, 사전 검증 |
+| `components/LicenseList.test.tsx` | 31 | 라이선스 기여 흐름, 검색, 표시 개수, Webpage 링크, 사전 검증 |
+| `components/OssList.test.tsx` | 76 | OSS 기여 흐름, 테이블 구성, 검색, 페이징, 링크, 수정본 반영, 사전 검증 |
 
 ```bash
 # 테스트 실행
