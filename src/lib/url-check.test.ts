@@ -282,7 +282,16 @@ describe('urlResultToHint 판정 매핑', () => {
 })
 
 describe('상한 상수', () => {
-  it('한 요청의 URL 개수 상한은 50 이다', () => {
-    expect(MAX_URLS_PER_REQUEST).toBe(50)
+  /**
+   * Cloudflare Workers Free 플랜의 외부 subrequest 한도는 호출당 50개다.
+   * URL 하나가 최악의 경우 HEAD + GET 두 번 나가므로 상한 × 2 가 50을 넘으면 안 된다.
+   * 이 값을 올리려면 플랜부터 확인해야 한다.
+   */
+  it('URL 개수 상한을 2배 해도 Workers Free 의 subrequest 한도(50) 안에 든다', () => {
+    expect(MAX_URLS_PER_REQUEST * 2).toBeLessThanOrEqual(50)
+  })
+
+  it('한 요청의 URL 개수 상한은 20 이다', () => {
+    expect(MAX_URLS_PER_REQUEST).toBe(20)
   })
 })

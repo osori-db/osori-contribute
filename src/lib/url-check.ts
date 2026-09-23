@@ -30,8 +30,15 @@ export interface UrlCheckData {
   readonly results: readonly UrlCheckResult[]
 }
 
-/** 한 요청에 담을 수 있는 URL 최대 개수. 클라이언트는 이 값으로 청크를 나눈다. */
-export const MAX_URLS_PER_REQUEST = 50
+/**
+ * 한 요청에 담을 수 있는 URL 최대 개수. 클라이언트는 이 값으로 청크를 나눈다.
+ *
+ * Cloudflare Workers Free 플랜은 한 번의 호출에서 외부 subrequest 를 50개까지만 허용한다.
+ * URL 하나당 HEAD 를 보내고 400·403·405·501 이면 GET 으로 한 번 더 보내므로 최악의 경우
+ * URL 개수의 2배가 나간다. 20 이면 최악 40 이라 10개의 여유가 남는다.
+ * 25(=최악 50)로 두면 한도에 정확히 붙어 다른 요청이 하나만 끼어들어도 실패한다.
+ */
+export const MAX_URLS_PER_REQUEST = 20
 
 /** 한 URL 문자열의 최대 길이. 라우트 스키마와 공유한다. */
 export const MAX_URL_LENGTH = 2048

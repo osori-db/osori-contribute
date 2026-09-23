@@ -81,7 +81,7 @@ describe('POST /api/url-check 입력 검증', () => {
     expect(response.status).toBe(400)
   })
 
-  it(`상한(${MAX_URLS_PER_REQUEST})을 넘는 51개는 400`, async () => {
+  it(`상한(${MAX_URLS_PER_REQUEST})을 넘으면 400`, async () => {
     const urls = Array.from({ length: MAX_URLS_PER_REQUEST + 1 }, (_, i) => `https://e.com/${i}`)
 
     const response = await POST(makeRequest({ urls }, withToken))

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { usePreValidation, type IndexedRow } from './usePreValidation'
 import { hasValidationFailure } from '@/lib/field-hints'
-import { urlResultToHint, type UrlCheckResult } from '@/lib/url-check'
+import { MAX_URLS_PER_REQUEST, urlResultToHint, type UrlCheckResult } from '@/lib/url-check'
 import type { UrlCheckMap } from '@/lib/pre-validation'
 
 // ─── Mocks ───
@@ -155,30 +155,34 @@ describe('usePreValidation 검증 실행', () => {
 })
 
 describe('usePreValidation 청크 분할', () => {
-  it('50개를 넘으면 나눠서 순차 요청한다', async () => {
+  it('상한을 넘으면 나눠서 순차 요청한다', async () => {
     respondOk()
     const { result } = renderPreValidation()
-    const urls = Array.from({ length: 51 }, (_, i) => `https://example.com/${i}`)
+    const urls = Array.from(
+      { length: MAX_URLS_PER_REQUEST + 1 },
+      (_, i) => `https://example.com/${i}`,
+    )
 
     await act(async () => {
       await result.current.validate(makeTargets([{ name: 'a', urls }]))
     })
 
     expect(mockCheckUrls).toHaveBeenCalledTimes(2)
-    expect(mockCheckUrls.mock.calls[0][1]).toHaveLength(50)
+    expect(mockCheckUrls.mock.calls[0][1]).toHaveLength(MAX_URLS_PER_REQUEST)
     expect(mockCheckUrls.mock.calls[1][1]).toHaveLength(1)
   })
 
   it('진행률은 청크가 아니라 URL 개수 기준이다', async () => {
     respondOk()
     const { result } = renderPreValidation()
-    const urls = Array.from({ length: 51 }, (_, i) => `https://example.com/${i}`)
+    const total = MAX_URLS_PER_REQUEST + 1
+    const urls = Array.from({ length: total }, (_, i) => `https://example.com/${i}`)
 
     await act(async () => {
       await result.current.validate(makeTargets([{ name: 'a', urls }]))
     })
 
-    expect(result.current.progress).toEqual({ current: 51, total: 51 })
+    expect(result.current.progress).toEqual({ current: total, total })
   })
 })
 
@@ -319,7 +323,7 @@ describe('usePreValidation 실패 처리', () => {
   })
 
   it('청크 하나가 실패해도 성공한 청크의 행은 urlChecked=true 로 남는다', async () => {
-    // 첫 청크(50개)는 성공, 두 번째 청크는 실패시킨다.
+    // 첫 청크(상한만큼)는 성공, 두 번째 청크는 실패시킨다.
     mockCheckUrls
       .mockImplementationOnce((_token: string, urls: readonly string[]) =>
         Promise.resolve({ success: true, data: { results: urls.map(okResult) } }),
@@ -327,8 +331,11 @@ describe('usePreValidation 실패 처리', () => {
       .mockResolvedValueOnce({ success: false, error: '일시 오류' })
 
     const { result } = renderPreValidation()
-    // 첫 행이 50개를 모두 차지해 첫 청크를 채우고, 두 번째 행의 URL 이 다음 청크로 밀린다.
-    const firstChunk = Array.from({ length: 50 }, (_, i) => `https://example.com/${i}`)
+    // 첫 행이 상한을 모두 차지해 첫 청크를 채우고, 두 번째 행의 URL 이 다음 청크로 밀린다.
+    const firstChunk = Array.from(
+      { length: MAX_URLS_PER_REQUEST },
+      (_, i) => `https://example.com/${i}`,
+    )
     const secondChunk = 'https://example.com/late'
 
     await act(async () => {
