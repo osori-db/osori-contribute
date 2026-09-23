@@ -63,18 +63,54 @@ export async function fetchLicenses(
   return apiFetch<readonly OsoriLicense[]>(`/api/osori/licenses?${params}`, token)
 }
 
-export async function fetchAllLicenses(
-  token: string,
-  page: number = 0,
-  size: number = 1000,
-): Promise<ApiResponse<readonly OsoriLicense[]>> {
+/**
+ * OSORI 의 `/api/v2/admin/licenses` 는 size 를 100 으로 제한한다.
+ * 이보다 크게 보내면 400 이 돌아오고 목록을 통째로 받지 못한다.
+ */
+export const LICENSE_PAGE_SIZE = 100
+
+/** 안전장치. 100 * 50 = 5000종까지 받는다. */
+const LICENSE_MAX_PAGES = 50
+
+function licensePageUrl(page: number): string {
   const params = new URLSearchParams({
     name: '',
     page: String(page),
-    size: String(size),
+    size: String(LICENSE_PAGE_SIZE),
     exactMatch: 'false',
   })
-  return apiFetch<readonly OsoriLicense[]>(`/api/osori/licenses?${params}`, token)
+  return `/api/osori/licenses?${params}`
+}
+
+/**
+ * 라이선스 마스터 목록 전체를 페이지를 이어 붙여 받는다.
+ *
+ * 한 페이지라도 실패하면 부분 목록을 성공으로 돌려주지 않는다. 목록에 빠진
+ * 라이선스는 규칙 4가 "OSORI 미등록" 으로 판정해 정상 행까지 막기 때문이다.
+ */
+export async function fetchAllLicenses(
+  token: string,
+): Promise<ApiResponse<readonly OsoriLicense[]>> {
+  const collected: OsoriLicense[] = []
+
+  try {
+    for (let page = 0; page < LICENSE_MAX_PAGES; page++) {
+      const result = await apiFetch<readonly OsoriLicense[]>(licensePageUrl(page), token)
+      if (!result.success || !result.data) {
+        return { success: false, error: result.error ?? '라이선스 목록 조회에 실패했습니다.' }
+      }
+
+      collected.push(...result.data)
+      if (result.data.length < LICENSE_PAGE_SIZE) break
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '라이선스 목록 조회에 실패했습니다.',
+    }
+  }
+
+  return { success: true, data: collected }
 }
 
 export async function fetchCreateLicense(
