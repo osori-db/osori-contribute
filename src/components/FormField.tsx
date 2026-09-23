@@ -130,6 +130,83 @@ export function TextAreaField({
   )
 }
 
+export interface RadioOption {
+  /** null 은 "고르지 않음" 이다. 저장 시 그대로 null 로 전달된다. */
+  readonly value: string | null
+  readonly label: string
+}
+
+interface RadioFieldProps {
+  readonly id: string
+  readonly label: string
+  readonly value: string | null
+  readonly options: readonly RadioOption[]
+  readonly onChange: (value: string | null) => void
+  readonly disabled?: boolean
+  readonly hints?: FieldHints
+  readonly hintField?: string
+  readonly help?: string
+}
+
+/**
+ * 값이 정해진 몇 개 중 하나인 필드. null 을 선택지로 다룬다.
+ *
+ * 라디오는 스스로 해제할 수 없으므로, 값을 비울 수 있으려면 "선택 안 함" 같은 항목이
+ * 목록에 있어야 한다. 그것 없이 두면 한 번 고른 뒤 되돌릴 방법이 없다.
+ *
+ * 그룹 전체를 가리키는 단일 컨트롤이 없어 `label htmlFor` 대신
+ * `role="radiogroup"` + `aria-labelledby` 로 이름을 붙인다.
+ */
+export function RadioField({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+  hints,
+  hintField,
+  help,
+}: RadioFieldProps) {
+  return (
+    <div>
+      <span id={`${id}-label`} className={FIELD_LABEL}>
+        {label}
+      </span>
+      <div
+        role="radiogroup"
+        aria-labelledby={`${id}-label`}
+        className="flex flex-wrap items-center gap-x-4 gap-y-1.5"
+      >
+        {options.map((option, index) => {
+          // 값에 공백·슬래시가 들어올 수 있어 값 대신 순번으로 id 를 만든다.
+          const optionId = `${id}-option-${index}`
+          return (
+            <label
+              key={optionId}
+              htmlFor={optionId}
+              className="inline-flex items-center gap-1.5 cursor-pointer has-disabled:cursor-not-allowed"
+            >
+              <input
+                id={optionId}
+                type="radio"
+                name={id}
+                className="w-4 h-4 border-gray-300 text-olive-600 focus:ring-olive-500/40 disabled:cursor-not-allowed"
+                checked={value === option.value}
+                disabled={disabled}
+                onChange={() => onChange(option.value)}
+              />
+              <span className="text-sm text-gray-700">{option.label}</span>
+            </label>
+          )
+        })}
+      </div>
+      {help && <p className="mt-1 text-xs text-gray-400">{help}</p>}
+      {hints && <FieldHintsView hints={hints} field={hintField ?? id} />}
+    </div>
+  )
+}
+
 interface CheckboxFieldProps {
   readonly id: string
   readonly label: string

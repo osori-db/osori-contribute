@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Modal from './Modal'
-import { FieldHintsView, TextAreaField, TextField } from './FormField'
+import { FieldHintsView, RadioField, TextAreaField, TextField, type RadioOption } from './FormField'
 import LicenseSelectField from './LicenseSelectField'
 import { hasValidationFailure } from '@/lib/field-hints'
 import { buildOssRowHints } from '@/lib/pre-validation'
@@ -31,6 +31,16 @@ interface OssContributeModalProps {
 function nullify(value: string): string | null {
   return value.trim() === '' ? null : value
 }
+
+/**
+ * License Combination 은 AND / OR 둘 중 하나이거나 비어 있다.
+ * 실데이터 3835행 기준 AND 57 · OR 52 · 빈 값 3726 으로, 그 밖의 값은 없었다.
+ */
+const LICENSE_COMBINATION_OPTIONS: readonly RadioOption[] = [
+  { value: null, label: '선택 안 함' },
+  { value: 'AND', label: 'AND' },
+  { value: 'OR', label: 'OR' },
+]
 
 export default function OssContributeModal({
   open,
@@ -65,6 +75,24 @@ export default function OssContributeModal({
     () => parseMultiValue(draft.downloadLocationList),
     [draft.downloadLocationList],
   )
+
+  /** 앞뒤 공백만 다른 값도 같은 선택지로 본다. 빈 문자열은 "고르지 않음"과 같다. */
+  const licenseCombination = draft.licenseCombination?.trim() || null
+
+  // 엑셀에 AND/OR 가 아닌 값이 들어 있으면 선택지로 노출한다. 목록에 없다고 조용히
+  // null 로 만들면 사용자는 원래 뭐가 적혀 있었는지 알 수 없다.
+  const combinationOptions = useMemo(() => {
+    if (
+      licenseCombination === null ||
+      LICENSE_COMBINATION_OPTIONS.some((option) => option.value === licenseCombination)
+    ) {
+      return LICENSE_COMBINATION_OPTIONS
+    }
+    return [
+      ...LICENSE_COMBINATION_OPTIONS,
+      { value: licenseCombination, label: `${licenseCombination} (엑셀 값)` },
+    ]
+  }, [licenseCombination])
 
   // 검증은 원본이 아니라 초안 기준이다 — 사용자가 고치면 즉시 반영되어야 한다.
   // URL 접속 검사 결과는 넘기지 않는다 — 모달에서는 오프라인 규칙만 적용한다.
@@ -182,15 +210,15 @@ export default function OssContributeModal({
           <FieldHintsView hints={hints} field="downloadLocationList" />
         </div>
 
-        <TextField
+        <RadioField
           id="oss-license-combination"
           label="License Combination"
-          value={draft.licenseCombination ?? ''}
+          value={licenseCombination}
+          options={combinationOptions}
           disabled={saving}
-          placeholder="AND 또는 OR"
           hints={hints}
           hintField="licenseCombination"
-          onChange={(v) => setDraft((p) => ({ ...p, licenseCombination: nullify(v) }))}
+          onChange={(v) => setDraft((p) => ({ ...p, licenseCombination: v }))}
         />
 
         <LicenseSelectField

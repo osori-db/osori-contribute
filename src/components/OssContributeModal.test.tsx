@@ -425,3 +425,79 @@ describe('OssContributeModal 마스터 목록 부재', () => {
     expect(onSave.mock.calls[0][0].detectedLicenseList).toBeNull()
   })
 })
+
+/**
+ * License Combination 은 AND / OR 둘 중 하나이거나 비어 있다(실데이터 3835행 기준
+ * AND 57 · OR 52 · 빈 값 3726). 자유 입력이면 오타가 그대로 전송되므로 라디오로 고정한다.
+ *
+ * 라디오는 스스로 해제할 수 없어서 "선택 안 함" 을 선택지로 둔다. 이게 없으면 한 번 고른 뒤
+ * 다시 비울 수 없는데, Declared License 가 하나뿐인 대다수 행에서는 비어 있는 것이 정상이다.
+ */
+describe('OssContributeModal License Combination 라디오', () => {
+  const combinationRadio = (name: string) => screen.getByRole('radio', { name })
+
+  it('선택 안 함 / AND / OR 세 가지를 라디오로 제공한다', () => {
+    renderModal(makeOssRow({ licenseCombination: null }))
+
+    expect(screen.getByRole('radiogroup', { name: 'License Combination' })).toBeInTheDocument()
+    expect(combinationRadio('선택 안 함')).toBeChecked()
+    expect(combinationRadio('AND')).not.toBeChecked()
+    expect(combinationRadio('OR')).not.toBeChecked()
+  })
+
+  it('기존 값이 있으면 해당 라디오가 선택된 상태로 열린다', () => {
+    renderModal(makeOssRow({ licenseCombination: 'OR' }))
+
+    expect(combinationRadio('OR')).toBeChecked()
+    expect(combinationRadio('선택 안 함')).not.toBeChecked()
+  })
+
+  it('AND 를 고르면 그 값이 저장된다', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal(makeOssRow({ licenseCombination: null }))
+
+    await user.click(combinationRadio('AND'))
+    await user.click(saveButton())
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ licenseCombination: 'AND' }))
+  })
+
+  it('선택 안 함 으로 되돌리면 null 이 전달된다', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal(makeOssRow({ licenseCombination: 'AND' }))
+
+    await user.click(combinationRadio('선택 안 함'))
+    await user.click(saveButton())
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ licenseCombination: null }))
+  })
+
+  it('자유 입력 칸은 사라진다', () => {
+    renderModal(makeOssRow({ licenseCombination: 'AND' }))
+
+    expect(screen.queryByRole('textbox', { name: 'License Combination' })).not.toBeInTheDocument()
+  })
+
+  it('앞뒤 공백이 있는 값도 해당 라디오로 인식한다', () => {
+    renderModal(makeOssRow({ licenseCombination: '  AND  ' }))
+
+    expect(combinationRadio('AND')).toBeChecked()
+  })
+
+  it('AND/OR 가 아닌 엑셀 값은 지우지 않고 선택지로 남긴다', () => {
+    // 조용히 null 로 만들면 사용자는 엑셀에 뭐가 적혀 있었는지 알 수 없다.
+    renderModal(makeOssRow({ licenseCombination: 'and/or' }))
+
+    expect(combinationRadio('and/or (엑셀 값)')).toBeChecked()
+    expect(combinationRadio('AND')).not.toBeChecked()
+  })
+
+  it('Declared License 가 2개인데 선택 안 함 이면 규칙 5 로 저장이 막힌다', () => {
+    renderModal(
+      makeOssRow({ declaredLicenseList: 'MIT License\nApache License 2.0', licenseCombination: null }),
+    )
+
+    expect(saveButton()).toBeDisabled()
+    expect(screen.getByText(/AND 또는 OR를 지정해주세요/)).toBeInTheDocument()
+  })
+})
