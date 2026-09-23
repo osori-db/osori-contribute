@@ -38,3 +38,7 @@ next-env.d.ts
 # harness workspace
 _workspace/
 _workspace_prev/
+
+# cloudflare workers
+.open-next/
+.wrangler/

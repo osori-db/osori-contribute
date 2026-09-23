@@ -11,6 +11,9 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# next.config.ts 가 이 값을 보고 standalone 산출물을 만든다. 없으면 .next/standalone 이
+# 생기지 않아 아래 COPY 가 실패한다.
+ENV DOCKER_BUILD=1
 RUN npm run build
 
 # --- 프로덕션 ---
