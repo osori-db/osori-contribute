@@ -2,6 +2,9 @@
   "name": "osori-contribute",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "description": "OSORI 오픈소스 기여 관리 도구",
   "scripts": {
     "dev": "next dev",
