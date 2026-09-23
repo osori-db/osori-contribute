@@ -86,6 +86,9 @@ beforeEach(() => {
   mockSearchParams = new URLSearchParams()
   mockFetchCreateLicense.mockReset()
   mockCheckUrls.mockReset()
+  // 호출 이력까지 지운다. mockReturnValue 만 다시 걸면 calls 가 테스트 사이에 누적되어
+  // mock.calls[0] 이 이전 테스트의 호출을 가리킨다.
+  mockMapNamesToIds.mockReset()
   mockMapNamesToIds.mockReturnValue([26])
   mockHasLicense.mockReturnValue(false)
   mockLicenseMappingLoading = false
@@ -666,5 +669,79 @@ describe('LicenseList 사전 검증', () => {
     expect(
       screen.getByText(/License text를 확인할 수 있는 URL을 입력해주세요\./),
     ).toBeInTheDocument()
+  })
+})
+
+/**
+ * 화면에 보이는 Restriction 배지와 실제로 전송되는 이름 목록이 같은 파서를 쓰는지 본다.
+ *
+ * 한때 표시(RestrictionBadges)는 `/[\n,]/`, 전송은 공유 parseMultiValue 를 써서 갈라져 있었다.
+ * useRestrictions.mapNamesToIds 가 매칭 실패한 이름을 에러 없이 버리므로, 갈라지면 사용자는
+ * 배지 3개를 보고 기여했는데 2개만 전송된 것을 알 수 없다.
+ */
+describe('LicenseList Restriction 표시·전송 파서 일관성', () => {
+  /** 줄바꿈과 쉼표를 함께 쓴 셀. 줄바꿈 우선이면 2건, 쉼표까지 쪼개면 3건이 된다. */
+  const MIXED = 'Network Triggered, Purpose Restriction\nInternal Use Only'
+
+  /**
+   * Restriction 열(6번째)의 배지 텍스트. 값이 없을 때 렌더되는 `-` 플레이스홀더는
+   * `div` 밖의 span 이므로 `div span` 으로 좁혀 걸러낸다.
+   */
+  function restrictionBadgeTexts(): readonly string[] {
+    return [
+      ...screen.getByRole('table').querySelectorAll('tbody tr td:nth-child(6) div span'),
+    ].map((el) => el.textContent ?? '')
+  }
+
+  it('혼용 셀의 배지 개수와 전송 이름 개수가 같다', async () => {
+    const user = userEvent.setup()
+    mockFetchCreateLicense.mockResolvedValue({ success: true })
+    render(<LicenseList rows={[makeLicenseRow({ restriction: MIXED })]} />)
+
+    const badges = restrictionBadgeTexts()
+    expect(badges).toEqual(['Network Triggered, Purpose Restriction', 'Internal Use Only'])
+
+    await user.click(screen.getByRole('button', { name: '전체 기여' }))
+
+    await waitFor(() => {
+      expect(mockMapNamesToIds).toHaveBeenCalled()
+    })
+    const sentNames = mockMapNamesToIds.mock.calls[0][0] as readonly string[]
+    expect(sentNames).toEqual(badges)
+  })
+
+  it('쉼표만 쓴 셀도 배지와 전송이 일치한다', async () => {
+    const user = userEvent.setup()
+    mockFetchCreateLicense.mockResolvedValue({ success: true })
+    render(
+      <LicenseList
+        rows={[makeLicenseRow({ restriction: 'Network Triggered, Internal Use Only' })]}
+      />,
+    )
+
+    const badges = restrictionBadgeTexts()
+    expect(badges).toEqual(['Network Triggered', 'Internal Use Only'])
+
+    await user.click(screen.getByRole('button', { name: '전체 기여' }))
+
+    await waitFor(() => {
+      expect(mockMapNamesToIds).toHaveBeenCalled()
+    })
+    expect(mockMapNamesToIds.mock.calls[0][0]).toEqual(badges)
+  })
+
+  it('Restriction 이 없으면 전송 이름도 비어 있다', async () => {
+    const user = userEvent.setup()
+    mockFetchCreateLicense.mockResolvedValue({ success: true })
+    render(<LicenseList rows={[makeLicenseRow({ restriction: null })]} />)
+
+    expect(restrictionBadgeTexts()).toEqual([])
+
+    await user.click(screen.getByRole('button', { name: '전체 기여' }))
+
+    await waitFor(() => {
+      expect(mockMapNamesToIds).toHaveBeenCalled()
+    })
+    expect(mockMapNamesToIds.mock.calls[0][0]).toEqual([])
   })
 })
