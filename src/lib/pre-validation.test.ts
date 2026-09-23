@@ -330,3 +330,28 @@ describe('toRowValidationResult', () => {
     expect(toRowValidationResult({}, false).urlChecked).toBe(false)
   })
 })
+
+// collectOssUrls 는 parseMultiValue 를 거치므로 줄바꿈 우선 전환의 영향을 받는다.
+describe('collectOssUrls 다중값 분리 (줄바꿈 우선 전환 회귀)', () => {
+  it('쉼표만 있는 후보 목록은 기존대로 쪼갠다', () => {
+    const row = makeOssRow({
+      downloadLocation: 'https://github.com/a/b',
+      downloadLocationList: 'https://npmjs.com/a,https://pypi.org/a',
+    })
+
+    expect(collectOssUrls(row)).toEqual([
+      'https://github.com/a/b',
+      'https://npmjs.com/a',
+      'https://pypi.org/a',
+    ])
+  })
+
+  it('줄바꿈이 있으면 쉼표를 URL 의 일부로 남긴다', () => {
+    const row = makeOssRow({
+      downloadLocation: '',
+      downloadLocationList: 'https://example.com/a,b\nhttps://npmjs.com/a',
+    })
+
+    expect(collectOssUrls(row)).toEqual(['https://example.com/a,b', 'https://npmjs.com/a'])
+  })
+})

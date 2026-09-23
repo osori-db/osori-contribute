@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { toLicenseCreateRequest } from './license-mapper'
+import { parseMultiValue } from './multi-value'
 import type { LicenseRow } from './types'
 
 function makeLicenseRow(overrides: Partial<LicenseRow> = {}): LicenseRow {
@@ -38,11 +39,20 @@ describe('toLicenseCreateRequest', () => {
     expect(result.restrictionList).toEqual([26, 31])
   })
 
-  it('nickName을 줄바꿈/콤마로 분리하여 배열로 변환한다', () => {
+  it('nickName에 줄바꿈이 있으면 줄바꿈으로만 분리한다', () => {
+    // 공유 parseMultiValue 로 통합된 뒤의 동작. 이전 로컬 복제본은 쉼표까지 쪼개
+    // ['Apache 2.0', 'ASL 2.0', 'ASF License'] 를 만들었다.
     const row = makeLicenseRow({ nickName: 'Apache 2.0\nASL 2.0,ASF License' })
     const result = toLicenseCreateRequest(row, [])
 
-    expect(result.nicknameList).toEqual(['Apache 2.0', 'ASL 2.0', 'ASF License'])
+    expect(result.nicknameList).toEqual(['Apache 2.0', 'ASL 2.0,ASF License'])
+  })
+
+  it('nickName에 줄바꿈이 없으면 쉼표로 분리한다', () => {
+    const row = makeLicenseRow({ nickName: 'Apache 2.0, ASL 2.0' })
+    const result = toLicenseCreateRequest(row, [])
+
+    expect(result.nicknameList).toEqual(['Apache 2.0', 'ASL 2.0'])
   })
 
   it('webpageList를 줄바꿈/콤마로 분리하여 배열로 변환한다', () => {
@@ -94,5 +104,26 @@ describe('toLicenseCreateRequest', () => {
     const result = toLicenseCreateRequest(row, [])
 
     expect(result).not.toHaveProperty('reviewed')
+  })
+})
+
+/**
+ * license-mapper 도 multi-value.ts 대신 로컬 복제본(`/[\n,]/`)을 쓴다.
+ * 실데이터 형태(쉼표만 / 줄바꿈만)에서는 공유 파서와 결과가 같다는 것을 고정한다.
+ */
+describe('toLicenseCreateRequest 다중값 분리 (줄바꿈 우선 전환 회귀)', () => {
+  it('쉼표만 있는 nickName 은 공유 파서와 같은 결과다', () => {
+    const result = toLicenseCreateRequest(makeLicenseRow({ nickName: 'Apache 2, ASL 2.0' }), [])
+
+    expect(result.nicknameList).toEqual(['Apache 2', 'ASL 2.0'])
+    expect(result.nicknameList).toEqual(parseMultiValue('Apache 2, ASL 2.0'))
+  })
+
+  it('줄바꿈만 있는 webpageList 도 공유 파서와 같은 결과다', () => {
+    const value = 'https://a.example\nhttps://b.example'
+    const result = toLicenseCreateRequest(makeLicenseRow({ webpageList: value }), [])
+
+    expect(result.webpageList).toEqual(['https://a.example', 'https://b.example'])
+    expect(result.webpageList).toEqual(parseMultiValue(value))
   })
 })

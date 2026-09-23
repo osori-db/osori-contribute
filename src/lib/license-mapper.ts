@@ -1,10 +1,6 @@
 import type { LicenseRow } from './types'
 import type { OsoriLicenseCreateRequest } from './osori-types'
-
-function parseMultiValue(value: string | null): readonly string[] {
-  if (!value) return []
-  return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
-}
+import { parseMultiValue } from './multi-value'
 
 export function toLicenseCreateRequest(
   row: LicenseRow,

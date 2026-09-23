@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildPurl, toOssCreateRequest, toOssVersionCreateRequest } from './oss-mapper'
+import { parseMultiValue } from './multi-value'
 import type { OssRow } from './types'
 
 function makeOssRow(overrides: Partial<OssRow> = {}): OssRow {
@@ -172,5 +173,46 @@ describe('toOssVersionCreateRequest', () => {
     const result = toOssVersionCreateRequest(row, 100, [], [])
 
     expect(result).not.toHaveProperty('reviewed')
+  })
+})
+
+/**
+ * oss-mapper 는 한때 `/[\n,]/` 로 쪼개는 로컬 복제본을 갖고 있었다. 공유 parseMultiValue 가
+ * 줄바꿈 우선으로 바뀌면서 두 구현의 알고리즘이 갈라졌고(혼용 셀에서만 결과가 달랐다),
+ * 지금은 공유 함수로 통합됐다. 아래는 그 통합을 고정한다 — 판정·표시에 쓰는 파서와
+ * 전송 payload 를 만드는 파서가 다시 갈라지면 여기서 걸린다.
+ */
+describe('toOssCreateRequest 다중값 분리 (줄바꿈 우선 전환 회귀)', () => {
+  it('쉼표만 있는 nickname 은 공유 파서와 같은 결과다', () => {
+    const result = toOssCreateRequest(makeOssRow({ nickname: 'lodash.js, lodash-es' }))
+
+    expect(result.nicknameList).toEqual(['lodash.js', 'lodash-es'])
+    expect(result.nicknameList).toEqual(parseMultiValue('lodash.js, lodash-es'))
+  })
+
+  it('줄바꿈만 있는 nickname 도 공유 파서와 같은 결과다', () => {
+    const result = toOssCreateRequest(makeOssRow({ nickname: 'lodash.js\nlodash-es' }))
+
+    expect(result.nicknameList).toEqual(['lodash.js', 'lodash-es'])
+    expect(result.nicknameList).toEqual(parseMultiValue('lodash.js\nlodash-es'))
+  })
+
+  it('혼용 셀도 공유 파서와 같게 해석한다 (로컬 복제본 제거 회귀)', () => {
+    // 로컬 복제본이 살아 있던 시절에는 ['a','b','c'] 로 더 잘게 쪼개졌다.
+    const mixed = 'a, b\nc'
+
+    expect(toOssCreateRequest(makeOssRow({ nickname: mixed })).nicknameList).toEqual(['a, b', 'c'])
+    expect(toOssCreateRequest(makeOssRow({ nickname: mixed })).nicknameList).toEqual(
+      parseMultiValue(mixed),
+    )
+  })
+
+  it('이름에 쉼표가 든 값도 줄바꿈이 있으면 통째로 보낸다', () => {
+    const value = 'Server Side Public License, v 1\nMIT'
+
+    expect(toOssCreateRequest(makeOssRow({ nickname: value })).nicknameList).toEqual([
+      'Server Side Public License, v 1',
+      'MIT',
+    ])
   })
 })

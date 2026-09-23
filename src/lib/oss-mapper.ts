@@ -1,10 +1,6 @@
 import type { OssRow } from './types'
 import type { OsoriOssCreateRequest, OsoriOssVersionCreateRequest } from './osori-types'
-
-function parseMultiValue(value: string | null): readonly string[] {
-  if (!value) return []
-  return value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
-}
+import { parseMultiValue } from './multi-value'
 
 /**
  * Download Location에서 purl(Package URL)을 생성한다.

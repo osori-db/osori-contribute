@@ -117,3 +117,37 @@ describe('validateLicenseRegistration (규칙 4)', () => {
     expect(hints.declaredLicense?.[0].status).toBe('fail')
   })
 })
+
+// 줄바꿈 우선 분리가 규칙 4 의 조회 단위를 바꾸지 않는지 고정한다.
+describe('validateLicenseRegistration 다중값 분리 (줄바꿈 우선 전환 회귀)', () => {
+  it('쉼표만 있는 셀은 기존대로 이름별로 조회한다', () => {
+    const spy = vi.fn(isRegistered)
+
+    validateLicenseRegistration(makeOssRow({ declaredLicenseList: 'MIT, Apache-2.0' }), spy)
+
+    expect(spy.mock.calls.map((call) => call[0])).toEqual(['MIT', 'Apache-2.0'])
+  })
+
+  it('줄바꿈만 있는 셀도 기존대로 이름별로 조회한다', () => {
+    const spy = vi.fn(isRegistered)
+
+    validateLicenseRegistration(makeOssRow({ declaredLicenseList: 'MIT\nApache-2.0' }), spy)
+
+    expect(spy.mock.calls.map((call) => call[0])).toEqual(['MIT', 'Apache-2.0'])
+  })
+
+  it('줄바꿈이 있으면 쉼표를 품은 이름을 통째로 조회한다', () => {
+    // 인자 타입을 명시해야 spy.mock.calls 가 빈 튜플로 추론되지 않는다.
+    const spy = vi.fn((_spdxOrName: string) => true)
+
+    validateLicenseRegistration(
+      makeOssRow({ declaredLicenseList: 'Server Side Public License, v 1\nMIT' }),
+      spy,
+    )
+
+    expect(spy.mock.calls.map((call) => call[0])).toEqual([
+      'Server Side Public License, v 1',
+      'MIT',
+    ])
+  })
+})

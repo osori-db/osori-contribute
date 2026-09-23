@@ -246,3 +246,41 @@ describe('validateOssRow 권고 힌트', () => {
     expect(hasValidationFailure(hints)).toBe(false)
   })
 })
+
+// parseMultiValue 가 줄바꿈 우선으로 바뀌면서 규칙 판정의 입력이 달라질 수 있는 지점을 고정한다.
+// 실데이터에는 줄바꿈·쉼표 혼용 셀이 0건이므로 기존 셀의 판정은 변하지 않아야 하고,
+// 혼용 셀만 "쉼표를 이름의 일부로" 읽는 새 동작을 따른다.
+describe('validateOssRow 다중값 분리 (줄바꿈 우선 전환 회귀)', () => {
+  it('쉼표만 있는 declared 셀은 기존대로 개수를 센다 (규칙 5)', () => {
+    const hints = validateOssRow(makeOssRow({ declaredLicenseList: 'MIT, Apache-2.0' }))
+
+    expect(hints.licenseCombination?.[0].message).toMatch(/Declared License가 2개입니다/)
+  })
+
+  it('줄바꿈만 있는 declared 셀도 기존대로 개수를 센다 (규칙 5)', () => {
+    const hints = validateOssRow(makeOssRow({ declaredLicenseList: 'MIT\nApache-2.0' }))
+
+    expect(hints.licenseCombination?.[0].message).toMatch(/Declared License가 2개입니다/)
+  })
+
+  it('줄바꿈이 있으면 쉼표는 이름의 일부로 본다 — 3개가 아니라 2개다', () => {
+    const hints = validateOssRow(
+      makeOssRow({ declaredLicenseList: 'Server Side Public License, v 1\nMIT' }),
+    )
+
+    expect(hints.licenseCombination?.[0].message).toMatch(/Declared License가 2개입니다/)
+  })
+
+  it('쉼표를 품은 이름 하나만 든 셀은 규칙 6 에서도 한 이름으로 비교된다', () => {
+    const hints = validateOssRow(
+      makeOssRow({
+        declaredLicenseList: 'Server Side Public License, v 1\n',
+        detectedLicenseList: 'server side public license, v 1\n',
+      }),
+    )
+
+    expect(hints.declaredLicense?.[0].message).toBe(
+      'declared와 detected에 같은 라이선스가 중복 등록되었습니다: Server Side Public License, v 1',
+    )
+  })
+})
