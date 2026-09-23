@@ -403,15 +403,15 @@ http/https 스킴만 허용, 내부·사설 주소 차단, 리다이렉트 미�
 
 ## 테스트
 
-24개 테스트 파일, 총 583개 테스트 케이스:
+24개 테스트 파일, 총 585개 테스트 케이스:
 
 | 파일 | 테스트 수 | 설명 |
 |------|-----------|------|
 | `lib/api-client.test.ts` | 10 | 내부 API 클라이언트 응답·에러 처리 |
 | `lib/multi-value.test.ts` | 19 | 다중값 분리(줄바꿈 우선)·직렬화, parse↔join 왕복 불변식 |
 | `lib/license-search.test.ts` | 24 | 검색 랭킹 5단계, 상한 50, 선택 차단 사유, 규칙 6 정합성 |
-| `lib/license-mapper.test.ts` | 12 | 라이선스 → OSORI 요청 변환 |
-| `lib/oss-mapper.test.ts` | 24 | OSS → OSORI 요청 변환 + purl 생성 |
+| `lib/license-mapper.test.ts` | 13 | 라이선스 → OSORI 요청 변환 |
+| `lib/oss-mapper.test.ts` | 25 | OSS → OSORI 요청 변환 + purl 생성 |
 | `lib/row-diff.test.ts` | 9 | 변경 필드 추출 + 필드 라벨 매핑 |
 | `lib/url.test.ts` | 6 | 링크 허용 스킴 판별 (`javascript:` 등 차단) |
 | `lib/field-hints.test.ts` | 14 | 힌트 병합·집계 (병합 시 입력 불변성 포함) |

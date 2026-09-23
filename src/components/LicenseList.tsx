@@ -56,7 +56,8 @@ function RestrictionBadges({ value }: { readonly value: string | null }) {
     'Internal Use Only': 'bg-purple-50 text-purple-700 border-purple-200',
   }
 
-  const items = value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
+  // 표시와 전송(mapNamesToIds)이 같은 파서를 써야 배지 개수와 payload 항목 수가 어긋나지 않는다.
+  const items = parseMultiValue(value)
 
   if (items.length === 0) return <span className="text-gray-300">-</span>
 
@@ -77,9 +78,7 @@ function RestrictionBadges({ value }: { readonly value: string | null }) {
 function WebpageCell({ webpage, webpageList }: { readonly webpage: string; readonly webpageList: string | null }) {
   if (!webpage && !webpageList) return <span className="text-gray-300">-</span>
 
-  const extraUrls = webpageList
-    ? webpageList.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
-    : []
+  const extraUrls = parseMultiValue(webpageList)
 
   return (
     <div className="flex flex-col gap-0.5">
