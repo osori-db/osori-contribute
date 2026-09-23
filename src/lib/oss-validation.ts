@@ -11,8 +11,14 @@ function hasVersionPrefix(version: string): boolean {
   return /^[vV](?:er(?:sion)?\.?\s*)?/i.test(version)
 }
 
+/**
+ * 순수 숫자는 16진수로도 유효하므로 `a-f` 를 최소 하나 요구한다.
+ * 이 조건이 없으면 `20240226`(ca-certificates 의 실제 버전) 같은 날짜형 버전이
+ * git hash 로 오인된다 — 실데이터에서 차단 84건 중 31건이 이 오탐이었다.
+ * 대신 숫자로만 이루어진 단축 해시는 놓치지만, 날짜 버전을 막는 쪽이 훨씬 잦고 해롭다.
+ */
 function isGitHash(version: string): boolean {
-  return /^[0-9a-f]{7,40}$/i.test(version)
+  return /^[0-9a-f]{7,40}$/i.test(version) && /[a-f]/i.test(version)
 }
 
 function hasSemverPreRelease(version: string): boolean {

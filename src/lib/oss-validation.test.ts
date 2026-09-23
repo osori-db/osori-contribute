@@ -128,6 +128,53 @@ describe('validateOssRow 규칙 3·5 — version (기존 동작 회귀)', () => 
   })
 })
 
+/**
+ * 순수 숫자도 16진수로 유효하므로 날짜형 버전이 git hash 로 오인됐다.
+ * 실데이터 3835행에서 git hash 로 차단된 84건 중 31건(37%)이 이 오탐이었다.
+ * ca-certificates 20240226 처럼 날짜가 실제 상위 버전인 OSS 가 막혔다.
+ */
+describe('validateOssRow 규칙 5 — git hash 오탐 (실데이터 회귀)', () => {
+  const notHash = [
+    '20240226', // ca-certificates — 실제 상위 버전
+    '20030416', // Bitstream Vera Fonts
+    '19990102', // Expat XML Parser
+    '20101011',
+    '330443010', // Android 빌드 번호
+    '202110119',
+    '1234567', // 7자리 순수 숫자
+    '1'.repeat(40), // 40자리 순수 숫자
+  ]
+
+  it.each(notHash)('숫자로만 된 %s 는 git hash 로 보지 않는다', (version) => {
+    const hints = validateOssRow(makeOssRow({ version }))
+
+    expect(messages(hints, 'version')).not.toContain(
+      'fail:Git hash 값은 버전으로 사용할 수 없습니다.',
+    )
+  })
+
+  const realHash = [
+    'ea6a9b5c5ad7ff78f065a04572f942daf648a0d5',
+    'c484031f1f199ee53567241426efffee49008f82',
+    '00b9287e8c1255b5922ef90e304d5287361b2c2a',
+    '06f695f1c8ee530104416aab5dcf2d6a1414a56a',
+    'a1b2c3d',
+    '8af9b8c', // 7자 단축 해시
+  ]
+
+  it.each(realHash)('a-f 를 포함한 %s 는 여전히 fail 이다', (version) => {
+    const hints = validateOssRow(makeOssRow({ version }))
+
+    expect(messages(hints, 'version')).toContain(
+      'fail:Git hash 값은 버전으로 사용할 수 없습니다.',
+    )
+  })
+
+  it('숫자로만 된 날짜 버전은 아무 힌트도 남기지 않는다', () => {
+    expect(validateOssRow(makeOssRow({ version: '20240226' })).version).toBeUndefined()
+  })
+})
+
 describe('validateOssRow 규칙 6 — declared / detected 중복', () => {
   it('같은 이름이 양쪽에 있으면 두 필드 모두 fail', () => {
     const hints = validateOssRow(
