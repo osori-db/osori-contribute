@@ -100,9 +100,11 @@ OSS 탭에서 엑셀을 업로드하면 OSS 목록이 표시됩니다. 컬럼은
 
 OSS 기여 모달에서도 모든 항목을 수정할 수 있으며, Declared/Detected License를 고치면 매핑 배지(`#ID` / `?`)가 즉시 다시 계산됩니다.
 
+**Declared / Detected License는 자유 입력이 아니라 검색·선택 컨트롤입니다.** OSORI 마스터 목록에서 이름 또는 SPDX ID로 검색해 고르며, 임의 문자열을 직접 넣을 수 없습니다. 이미 고른 항목과 반대편 필드에 있는 항목은 목록에서 사라지지 않고 **비활성 + 사유**로 표시되어 규칙 6(declared/detected 중복)을 선택 단계에서 막습니다. 엑셀에서 온 미등록 이름은 자동으로 지워지지 않고 빨간 `?` 배지로 남으며, 직접 제거해야 저장이 열립니다. 마스터 목록을 불러오는 중이거나 조회에 실패하면 검색은 잠기고 **배지 제거는 계속 허용**합니다.
+
 ![OSS 모달](docs/screenshots/05-oss-modal.png)
 
-> 현재 화면과 다른 점: 모든 필드가 입력 폼으로 바뀜, 접이식 **"추가 정보"** 섹션(Description·Attribution·Compliance Notice·Release Date), Download Location 후보 URL 클릭 적용, "원래대로" 버튼
+> 현재 화면과 다른 점: 모든 필드가 입력 폼으로 바뀜, Declared/Detected License 검색·선택 컨트롤, 접이식 **"추가 정보"** 섹션(Description·Attribution·Compliance Notice·Release Date), Download Location 후보 URL 클릭 적용, "원래대로" 버튼
 
 ---
 
@@ -308,7 +310,8 @@ src/
 │   ├── OssTab.tsx                    # OSS 탭 컨테이너
 │   ├── DataList.tsx                  # 범용 데이터 목록 (미사용)
 │   ├── OssList.tsx                   # OSS 목록 + 검색/개별/전체 기여
-│   └── OssContributeModal.tsx        # OSS 기여·수정 모달
+│   ├── OssContributeModal.tsx        # OSS 기여·수정 모달
+│   └── LicenseSelectField.tsx        # 라이선스 검색·선택 컨트롤 (combobox + 배지)
 │
 ├── contexts/
 │   └── AuthContext.tsx               # 인증 컨텍스트 (sessionStorage)
@@ -333,7 +336,7 @@ src/
 │   ├── types.ts                      # 공통 TypeScript 타입
 │   ├── view-params.ts                # URL 파라미터 이름 + 탭 경로
 │   ├── excel-parser.ts               # 범용 엑셀 파싱 유틸
-│   ├── multi-value.ts                # 다중값 문자열 파싱 (단일 규칙)
+│   ├── multi-value.ts                # 다중값 문자열 파싱·직렬화 (줄바꿈 우선 단일 규칙)
 │   ├── row-diff.ts                   # 원본 대비 변경된 필드 추출
 │   ├── field-labels.ts               # 필드 키 → 화면 라벨
 │   ├── url.ts                        # 링크로 만들어도 안전한 URL 판별
@@ -348,6 +351,7 @@ src/
 │   ├── oss-mapper.ts                 # OSS → OSORI 요청 변환 + purl 생성
 │   ├── oss-validation.ts             # OSS 입력 검증
 │   ├── license-registry-validation.ts # 라이선스 OSORI 등록 여부 검증
+│   ├── license-search.ts             # 마스터 라이선스 검색·랭킹·선택 차단 사유 판정
 │   └── external-api.ts               # 외부 API 프록시 유틸
 │
 └── test/
@@ -399,18 +403,21 @@ http/https 스킴만 허용, 내부·사설 주소 차단, 리다이렉트 미�
 
 ## 테스트
 
-20개 테스트 파일, 총 455개 테스트 케이스:
+24개 테스트 파일, 총 583개 테스트 케이스:
 
 | 파일 | 테스트 수 | 설명 |
 |------|-----------|------|
-| `lib/license-mapper.test.ts` | 10 | 라이선스 → OSORI 요청 변환 |
-| `lib/oss-mapper.test.ts` | 21 | OSS → OSORI 요청 변환 + purl 생성 |
+| `lib/api-client.test.ts` | 10 | 내부 API 클라이언트 응답·에러 처리 |
+| `lib/multi-value.test.ts` | 19 | 다중값 분리(줄바꿈 우선)·직렬화, parse↔join 왕복 불변식 |
+| `lib/license-search.test.ts` | 24 | 검색 랭킹 5단계, 상한 50, 선택 차단 사유, 규칙 6 정합성 |
+| `lib/license-mapper.test.ts` | 12 | 라이선스 → OSORI 요청 변환 |
+| `lib/oss-mapper.test.ts` | 24 | OSS → OSORI 요청 변환 + purl 생성 |
 | `lib/row-diff.test.ts` | 9 | 변경 필드 추출 + 필드 라벨 매핑 |
 | `lib/url.test.ts` | 6 | 링크 허용 스킴 판별 (`javascript:` 등 차단) |
 | `lib/field-hints.test.ts` | 14 | 힌트 병합·집계 (병합 시 입력 불변성 포함) |
-| `lib/oss-validation.test.ts` | 21 | OSS 검증 규칙 (URL 형식·version·declared/detected 중복) |
-| `lib/license-registry-validation.test.ts` | 8 | 라이선스 OSORI 등록 여부 검증 |
-| `lib/pre-validation.test.ts` | 28 | 오프라인 규칙 + URL 결과 합성, 행별 URL 수집 |
+| `lib/oss-validation.test.ts` | 40 | OSS 검증 규칙 (URL 형식·version·declared/detected 중복·다중값 분리) |
+| `lib/license-registry-validation.test.ts` | 11 | 라이선스 OSORI 등록 여부 검증 |
+| `lib/pre-validation.test.ts` | 30 | 오프라인 규칙 + URL 결과 합성, 행별 URL 수집 |
 | `lib/url-check.test.ts` | 100 | 내부 주소 차단(IPv4-mapped IPv6·비표준 IPv4 표기 포함), 검사 가능 URL 판정, 힌트 매핑 |
 | `lib/url-reachability.test.ts` | 33 | 상태코드 판정, HEAD→GET 폴백, 타임아웃, 동시성 (fetch 모킹) |
 | `app/api/url-check/route.test.ts` | 15 | 401/400/200 응답, 개수 상한, 응답 누출 방지 |
@@ -419,10 +426,11 @@ http/https 스킴만 허용, 내부·사설 주소 차단, 리다이렉트 미�
 | `components/HomeView.test.tsx` | 10 | 탭 경로 라우팅 + 탭별 파라미터 기억/복원 |
 | `components/ValidationBadge.test.tsx` | 12 | 검증 배지 표시 규칙 + 힌트 서브행 |
 | `components/PreValidateButton.test.tsx` | 6 | 버튼 라벨·진행률·비활성화 |
-| `components/OssContributeModal.test.tsx` | 17 | OSS 모달 편집 + 사전 검증 규칙으로 인한 저장 차단 |
+| `components/LicenseSelectField.test.tsx` | 35 | 라이선스 검색·선택, 키보드·ARIA, 선택 차단, ESC 와 모달 충돌 |
+| `components/OssContributeModal.test.tsx` | 26 | OSS 모달 편집, 저장 차단, 라이선스 선택·직렬화, 마스터 목록 부재 |
 | `components/LicenseContributeModal.test.tsx` | 9 | 라이선스 모달 편집 (초안·검증·Restriction 추가) |
 | `components/LicenseList.test.tsx` | 31 | 라이선스 기여 흐름, 검색, 표시 개수, Webpage 링크, 사전 검증 |
-| `components/OssList.test.tsx` | 76 | OSS 기여 흐름, 테이블 구성, 검색, 페이징, 링크, 수정본 반영, 사전 검증 |
+| `components/OssList.test.tsx` | 78 | OSS 기여 흐름, 테이블 구성, 검색, 페이징, 링크, 수정본 반영, 사전 검증, 라이선스 직렬화 왕복 |
 
 ```bash
 # 테스트 실행
