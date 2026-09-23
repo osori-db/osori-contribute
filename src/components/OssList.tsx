@@ -63,6 +63,7 @@ export default function OssList({ rows }: OssListProps) {
 
   const {
     licenseMap,
+    licenses,
     loading: licenseMappingLoading,
     error: licenseMappingError,
     mapNamesToIds: mapLicenseNamesToIds,
@@ -579,6 +580,7 @@ export default function OssList({ rows }: OssListProps) {
           saving={saving}
           saveError={saveError}
           licenseMap={licenseMap}
+          licenses={licenses}
           licenseMappingLoading={licenseMappingLoading}
           isRegisteredLicense={isRegisteredLicense}
         />

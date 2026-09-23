@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OssContributeModal from './OssContributeModal'
+import type { OsoriLicense } from '@/lib/osori-types'
 import type { OssRow } from '@/lib/types'
 
 // ─── Helpers ───
@@ -30,12 +31,40 @@ function makeOssRow(overrides: Partial<OssRow> = {}): OssRow {
   }
 }
 
-const licenseMap = new Map<string, number>([['MIT', 1]])
+function lic(id: number, name: string, spdx: string | null = null): OsoriLicense {
+  return {
+    id,
+    name,
+    spdx_identifier: spdx,
+    obligation_disclosing_src: null,
+    obligation_notification: null,
+    osi_approval: null,
+  }
+}
+
+/**
+ * 검색 컨트롤이 고를 수 있는 마스터 목록.
+ * 이름에 쉼표가 든 실제 마스터 항목(SSPL)을 넣어 직렬화 왕복까지 모달 레벨에서 확인한다.
+ */
+const LICENSES: readonly OsoriLicense[] = [
+  lic(1, 'MIT', 'MIT'),
+  lic(2, 'Apache-2.0', 'Apache-2.0'),
+  lic(3, 'Server Side Public License, v 1', 'SSPL-1.0'),
+]
+
+const licenseMap = new Map<string, number>(LICENSES.map((l) => [l.name.toLowerCase(), l.id]))
 
 /** OSORI 마스터에 등록된 라이선스. licenseMap 과 같은 집합을 본다. */
-const isRegisteredLicense = (name: string) => licenseMap.has(name.trim())
+const isRegisteredLicense = (name: string) => licenseMap.has(name.trim().toLowerCase())
 
-function renderModal(row: OssRow, onSave = vi.fn(), isRegistered = isRegisteredLicense) {
+interface RenderOptions {
+  readonly isRegistered?: (name: string) => boolean
+  readonly licenses?: readonly OsoriLicense[]
+  readonly licenseMappingLoading?: boolean
+}
+
+function renderModal(row: OssRow, options: RenderOptions = {}) {
+  const onSave = vi.fn()
   render(
     <OssContributeModal
       open
@@ -44,14 +73,28 @@ function renderModal(row: OssRow, onSave = vi.fn(), isRegistered = isRegisteredL
       onSave={onSave}
       saving={false}
       licenseMap={licenseMap}
-      licenseMappingLoading={false}
-      isRegisteredLicense={isRegistered}
+      licenses={options.licenses ?? LICENSES}
+      licenseMappingLoading={options.licenseMappingLoading ?? false}
+      isRegisteredLicense={options.isRegistered ?? isRegisteredLicense}
     />,
   )
   return { onSave }
 }
 
 const saveButton = () => screen.getByRole('button', { name: '저장' })
+const declaredCombobox = () => screen.getByRole('combobox', { name: 'Declared License' })
+
+/** 검색 → 디바운스 대기 → 옵션 클릭. 자유 입력 경로가 없으므로 추가는 항상 이 흐름이다. */
+async function pickLicense(
+  user: ReturnType<typeof userEvent.setup>,
+  combobox: HTMLElement,
+  query: string,
+  optionName: string,
+) {
+  await user.type(combobox, query)
+  const option = await screen.findByRole('option', { name: new RegExp(optionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
+  await user.click(option)
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -131,18 +174,40 @@ describe('OssContributeModal 편집', () => {
     expect(screen.getByText(/v\/V\/ver 접두사를 제거해주세요\./)).toBeInTheDocument()
   })
 
-  it('Declared License를 수정하면 매핑 배지가 갱신된다', async () => {
+  // textarea 자유 입력이 사라졌으므로 "배지 제거 → 검색 → 옵션 선택" 흐름으로 바꿨다.
+  it('Declared License 배지를 제거하고 다시 고르면 매핑 배지가 갱신된다', async () => {
     const user = userEvent.setup()
     renderModal(makeOssRow())
 
     expect(screen.getByText('#1')).toBeInTheDocument()
 
-    const declared = screen.getByLabelText('Declared License')
-    await user.clear(declared)
-    await user.type(declared, 'Unknown-License')
-
+    await user.click(screen.getByRole('button', { name: 'MIT 제거' }))
     expect(screen.queryByText('#1')).not.toBeInTheDocument()
+
+    await pickLicense(user, declaredCombobox(), 'Apache', 'Apache-2.0')
+
+    expect(screen.getByText('#2')).toBeInTheDocument()
+    expect(screen.queryByText(/매핑되지 않은 License/)).not.toBeInTheDocument()
+  })
+
+  it('엑셀에서 온 미등록 이름은 자동 삭제되지 않고 경고와 함께 남는다', () => {
+    renderModal(makeOssRow({ declaredLicenseList: 'Unknown-License' }))
+
+    expect(screen.getByText('Unknown-License')).toBeInTheDocument()
     expect(screen.getByText(/매핑되지 않은 License: Unknown-License/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unknown-License 제거' })).toBeInTheDocument()
+  })
+
+  it('반대편 필드에 선택된 라이선스는 검색 결과에 보이되 고를 수 없다 (규칙 6 선제 차단)', async () => {
+    const user = userEvent.setup()
+    renderModal(makeOssRow({ declaredLicenseList: 'MIT', detectedLicenseList: null }))
+
+    const detected = screen.getByRole('combobox', { name: 'Detected License' })
+    await user.type(detected, 'MIT')
+
+    const option = await screen.findByRole('option', { name: /MIT/ })
+    expect(option).toHaveAttribute('aria-disabled', 'true')
+    expect(option).toHaveTextContent('declared에 이미 선택됨')
   })
 
   it('원래대로를 누르면 편집 내용이 원본으로 되돌아간다', async () => {
@@ -216,15 +281,29 @@ describe('OssContributeModal 사전 검증 규칙', () => {
     expect(saveButton()).toBeDisabled()
   })
 
-  it('규칙 위반을 고치면 저장이 다시 열린다', async () => {
+  // R6: 미등록 배지가 남아 있으면 저장이 막힌 채로 유지되고, 제거해야 열린다.
+  it('규칙 4 위반 배지를 제거하고 등록된 라이선스를 고르면 저장이 다시 열린다', async () => {
     const user = userEvent.setup()
     renderModal(makeOssRow({ declaredLicenseList: 'FooBar-1.0' }))
 
     expect(saveButton()).toBeDisabled()
 
-    const declared = screen.getByLabelText('Declared License')
-    await user.clear(declared)
-    await user.type(declared, 'MIT')
+    // 등록된 이름을 추가해도 미등록 배지가 남아 있는 한 저장은 계속 막혀 있다.
+    await pickLicense(user, declaredCombobox(), 'MIT', 'MIT')
+    expect(saveButton()).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'FooBar-1.0 제거' }))
+
+    expect(saveButton()).toBeEnabled()
+  })
+
+  it('미등록 배지만 제거해도 저장이 열린다', async () => {
+    const user = userEvent.setup()
+    renderModal(makeOssRow({ declaredLicenseList: 'MIT\nFooBar-1.0', licenseCombination: 'AND' }))
+
+    expect(saveButton()).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'FooBar-1.0 제거' }))
 
     expect(saveButton()).toBeEnabled()
   })
@@ -261,5 +340,88 @@ describe('OssContributeModal 추가 정보', () => {
     await user.click(saveButton())
 
     expect(onSave.mock.calls[0][0].attribution).toBe('Copyright notice')
+  })
+})
+
+// ─── 제약 A: 선택 결과의 직렬화 형식 ───
+
+describe('OssContributeModal 라이선스 직렬화', () => {
+  it('여러 건을 고르면 쉼표가 아니라 줄바꿈으로 이어 저장한다', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal(
+      makeOssRow({ declaredLicenseList: null, licenseCombination: 'AND' }),
+    )
+
+    await pickLicense(user, declaredCombobox(), 'MIT', 'MIT')
+    await pickLicense(user, declaredCombobox(), 'Apache', 'Apache-2.0')
+    await user.click(saveButton())
+
+    expect(onSave.mock.calls[0][0].declaredLicenseList).toBe('MIT\nApache-2.0')
+  })
+
+  it('이름에 쉼표가 든 라이선스를 단독으로 고르면 후행 줄바꿈으로 구분자 모드를 고정한다', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal(makeOssRow({ declaredLicenseList: null }))
+
+    await pickLicense(user, declaredCombobox(), 'Server Side', 'Server Side Public License, v 1')
+
+    // 쪼개지지 않고 배지 하나로 남는다 — 쪼개졌다면 미등록 배지 2개가 되어 저장이 막힌다.
+    expect(screen.getByText('#3')).toBeInTheDocument()
+    expect(screen.queryByText(/매핑되지 않은 License/)).not.toBeInTheDocument()
+
+    await user.click(saveButton())
+    expect(onSave.mock.calls[0][0].declaredLicenseList).toBe('Server Side Public License, v 1\n')
+  })
+
+  it('쉼표가 든 이름을 다른 이름과 함께 골라도 각각 한 건으로 유지된다', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal(
+      makeOssRow({ declaredLicenseList: null, licenseCombination: 'OR' }),
+    )
+
+    await pickLicense(user, declaredCombobox(), 'Server Side', 'Server Side Public License, v 1')
+    await pickLicense(user, declaredCombobox(), 'MIT', 'MIT')
+
+    expect(screen.getByText('#3')).toBeInTheDocument()
+    expect(screen.getByText('#1')).toBeInTheDocument()
+
+    await user.click(saveButton())
+    expect(onSave.mock.calls[0][0].declaredLicenseList).toBe(
+      'Server Side Public License, v 1\nMIT',
+    )
+  })
+
+  it('마지막 배지를 제거하면 빈 문자열이 아니라 null 로 저장된다', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal(makeOssRow({ detectedLicenseList: 'Apache-2.0' }))
+
+    await user.click(screen.getByRole('button', { name: 'Apache-2.0 제거' }))
+    await user.click(saveButton())
+
+    expect(onSave.mock.calls[0][0].detectedLicenseList).toBeNull()
+  })
+})
+
+// ─── §3.5: 마스터 목록을 못 쓰는 상태 ───
+
+describe('OssContributeModal 마스터 목록 부재', () => {
+  it('로딩 중에는 검색이 막히고 저장 버튼이 "매핑 중..." 으로 잠긴다', () => {
+    renderModal(makeOssRow(), { licenses: [], licenseMappingLoading: true })
+
+    expect(declaredCombobox()).toBeDisabled()
+    expect(screen.getByRole('button', { name: '매핑 중...' })).toBeDisabled()
+  })
+
+  it('조회 실패로 목록이 비어도 배지 제거는 가능하다', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal(makeOssRow({ detectedLicenseList: 'Apache-2.0' }), {
+      licenses: [],
+    })
+
+    expect(declaredCombobox()).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Apache-2.0 제거' }))
+    await user.click(saveButton())
+
+    expect(onSave.mock.calls[0][0].detectedLicenseList).toBeNull()
   })
 })

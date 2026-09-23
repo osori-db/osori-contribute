@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OssList from './OssList'
+import type { OsoriLicense } from '@/lib/osori-types'
 import type { OssRow } from '@/lib/types'
 
 // ─── Mocks ───
@@ -20,16 +21,33 @@ vi.mock('@/hooks/useAuth', () => ({
 }))
 
 const mockMapNamesToIds = vi.fn().mockReturnValue([1])
-// OSORI 마스터에 등록되어 있다고 볼 라이선스. 규칙 4 판정의 입력이다.
-let mockRegisteredLicenses = ['MIT', 'Apache-2.0']
+
+/**
+ * OSORI 마스터 목록. 규칙 4 판정(hasLicense)과 모달의 검색 목록(licenses)이 **같은 출처**를 본다.
+ * 둘이 갈라지면 목이 현실에 없는 상태를 만든다 — 실제로 착수 시점에 `hasLicense: () => false` 와
+ * MIT 이 든 licenseMap 이 공존해 테스트 19건이 거짓으로 깨져 있었다.
+ * 타입을 붙여 OsoriLicense 필수 필드 누락이 조용히 지나가지 않게 한다.
+ */
+const MASTER_LICENSES: readonly OsoriLicense[] = [
+  { id: 1, name: 'MIT', spdx_identifier: 'MIT', obligation_disclosing_src: null, obligation_notification: null, osi_approval: null },
+  { id: 2, name: 'Apache-2.0', spdx_identifier: 'Apache-2.0', obligation_disclosing_src: null, obligation_notification: null, osi_approval: null },
+  // 이름 자체에 쉼표가 든 실제 마스터 항목. 직렬화 왕복이 깨지면 여기서 드러난다.
+  { id: 3, name: 'Server Side Public License, v 1', spdx_identifier: 'SSPL-1.0', obligation_disclosing_src: null, obligation_notification: null, osi_approval: null },
+]
+
+let mockRegisteredLicenses: readonly OsoriLicense[] = MASTER_LICENSES
 let mockLicenseMappingLoading = false
 let mockLicenseMappingError: string | null = null
-const mockHasLicense = (name: string) =>
-  mockRegisteredLicenses.some((known) => known.toLowerCase() === name.trim().toLowerCase())
+const mockHasLicense = (name: string) => {
+  const key = name.trim().toLowerCase()
+  return mockRegisteredLicenses.some(
+    (l) => l.name.toLowerCase() === key || (l.spdx_identifier ?? '').toLowerCase() === key,
+  )
+}
 vi.mock('@/hooks/useLicenseMapping', () => ({
   useLicenseMapping: () => ({
-    licenses: [{ id: 1, name: 'MIT', spdx_identifier: 'MIT' }],
-    licenseMap: new Map([['MIT', 1], ['mit', 1]]),
+    licenses: mockRegisteredLicenses,
+    licenseMap: new Map(mockRegisteredLicenses.map((l) => [l.name.toLowerCase(), l.id])),
     loading: mockLicenseMappingLoading,
     error: mockLicenseMappingError,
     mapNamesToIds: (...args: unknown[]) => mockMapNamesToIds(...args),
@@ -114,7 +132,7 @@ beforeEach(() => {
   mockFetchCreateOssVersion.mockReset()
   mockCheckUrls.mockReset()
   mockMapNamesToIds.mockReturnValue([1])
-  mockRegisteredLicenses = ['MIT', 'Apache-2.0']
+  mockRegisteredLicenses = MASTER_LICENSES
   mockLicenseMappingLoading = false
   mockLicenseMappingError = null
 })
@@ -1226,5 +1244,68 @@ describe('OssList 사전 검증', () => {
     await waitFor(() => {
       expect(screen.queryByText('검증 통과')).not.toBeInTheDocument()
     })
+  })
+})
+
+/**
+ * 모달의 선택 결과가 기여 payload 까지 한 이름으로 도달하는지 본다.
+ *
+ * 모달은 joinMultiValue 로 직렬화하고, OssList 는 parseMultiValue 로 되읽어
+ * mapNamesToIds 에 넘긴다. 두 함수가 어긋나면 이름에 쉼표가 든 라이선스가
+ * 전송 직전에 둘로 쪼개져 조용히 누락된다 — 규칙 4로도 잡히지 않는 경로다.
+ */
+describe('OssList 라이선스 직렬화 왕복', () => {
+  it('이름에 쉼표가 든 라이선스를 골라 저장하면 한 이름으로 매핑에 넘긴다', async () => {
+    const user = userEvent.setup()
+    mockPreCheckNotFound()
+    mockFetchCreateOss.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 200, name: 'lodash', purl: '', reviewed: 0 },
+    })
+    mockFetchOssVersions.mockResolvedValue(VERSION_NOT_FOUND)
+    mockFetchCreateOssVersion.mockResolvedValue({ success: true, data: { oss_version_id: 1 } })
+
+    render(<OssList rows={[makeOssRow()]} />)
+
+    await user.click(screen.getByRole('button', { name: /기여하기/ }))
+    await waitFor(() => {
+      expect(screen.getByText('OSS 기여하기')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'MIT 제거' }))
+    const combobox = screen.getByRole('combobox', { name: 'Declared License' })
+    await user.type(combobox, 'Server Side')
+    await user.click(await screen.findByRole('option', { name: /Server Side Public License, v 1/ }))
+
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => {
+      expect(mockFetchCreateOssVersion).toHaveBeenCalled()
+    })
+    // 쉼표로 쪼개졌다면 ['Server Side Public License', 'v 1'] 이 넘어간다.
+    expect(mockMapNamesToIds).toHaveBeenCalledWith(['Server Side Public License, v 1'])
+  })
+
+  it('배치 기여도 같은 파서로 읽어 한 이름으로 넘긴다', async () => {
+    const user = userEvent.setup()
+    mockFetchOssList.mockResolvedValue(OSS_NOT_FOUND)
+    mockFetchCreateOss.mockResolvedValue({
+      success: true,
+      data: { oss_master_id: 200, name: 'lodash', purl: '', reviewed: 0 },
+    })
+    mockFetchOssVersions.mockResolvedValue(VERSION_NOT_FOUND)
+    mockFetchCreateOssVersion.mockResolvedValue({ success: true, data: { oss_version_id: 1 } })
+
+    // 모달이 저장한 형태(후행 줄바꿈으로 구분자 모드를 고정한 값)를 그대로 재현한다.
+    render(
+      <OssList rows={[makeOssRow({ declaredLicenseList: 'Server Side Public License, v 1\n' })]} />,
+    )
+
+    await user.click(screen.getByRole('button', { name: '전체 기여' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('완료')).toBeInTheDocument()
+    })
+    expect(mockMapNamesToIds).toHaveBeenCalledWith(['Server Side Public License, v 1'])
   })
 })

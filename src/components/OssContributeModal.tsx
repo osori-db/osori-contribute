@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Modal from './Modal'
 import { FieldHintsView, TextAreaField, TextField } from './FormField'
+import LicenseSelectField from './LicenseSelectField'
 import { hasValidationFailure } from '@/lib/field-hints'
 import { buildOssRowHints } from '@/lib/pre-validation'
-import { parseMultiValue } from '@/lib/multi-value'
+import { joinMultiValue, parseMultiValue } from '@/lib/multi-value'
 import type { IsRegisteredLicense } from '@/lib/license-registry-validation'
+import type { OsoriLicense } from '@/lib/osori-types'
 import type { OssRow } from '@/lib/types'
 
 interface OssContributeModalProps {
@@ -16,7 +18,10 @@ interface OssContributeModalProps {
   readonly onSave: (row: OssRow) => void
   readonly saving: boolean
   readonly saveError?: string | null
+  /** 배지의 #id 표시용 조회 맵. name(소문자)·spdx_identifier 를 모두 키로 갖는다. */
   readonly licenseMap: ReadonlyMap<string, number>
+  /** 검색 대상 마스터 목록. useLicenseMapping().licenses 를 그대로 받는다. */
+  readonly licenses: readonly OsoriLicense[]
   readonly licenseMappingLoading: boolean
   /** OSORI 마스터 라이선스 조회. 규칙 4(등록 여부) 판정에 쓴다. */
   readonly isRegisteredLicense: IsRegisteredLicense
@@ -27,29 +32,6 @@ function nullify(value: string): string | null {
   return value.trim() === '' ? null : value
 }
 
-function LicenseBadgeWithMapping({
-  name,
-  id,
-  loading,
-}: {
-  readonly name: string
-  readonly id: number | null
-  readonly loading: boolean
-}) {
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border bg-blue-50 text-blue-700 border-blue-200">
-      {name}
-      {loading ? (
-        <span className="text-[10px] opacity-60">...</span>
-      ) : id !== null ? (
-        <span className="text-[10px] opacity-60">#{id}</span>
-      ) : (
-        <span className="text-[10px] text-red-500">?</span>
-      )}
-    </span>
-  )
-}
-
 export default function OssContributeModal({
   open,
   onClose,
@@ -58,6 +40,7 @@ export default function OssContributeModal({
   saving,
   saveError,
   licenseMap,
+  licenses,
   licenseMappingLoading,
   isRegisteredLicense,
 }: OssContributeModalProps) {
@@ -69,9 +52,19 @@ export default function OssContributeModal({
     setDraft(row)
   }, [row])
 
-  const declaredLicenses = parseMultiValue(draft.declaredLicenseList)
-  const detectedLicenses = parseMultiValue(draft.detectedLicenseList)
-  const downloadLocations = parseMultiValue(draft.downloadLocationList)
+  // 배열 신원이 매 렌더 바뀌면 LicenseSelectField 의 검색 결과 메모가 전부 무효화된다(686건 정렬).
+  const declaredLicenses = useMemo(
+    () => parseMultiValue(draft.declaredLicenseList),
+    [draft.declaredLicenseList],
+  )
+  const detectedLicenses = useMemo(
+    () => parseMultiValue(draft.detectedLicenseList),
+    [draft.detectedLicenseList],
+  )
+  const downloadLocations = useMemo(
+    () => parseMultiValue(draft.downloadLocationList),
+    [draft.downloadLocationList],
+  )
 
   // 검증은 원본이 아니라 초안 기준이다 — 사용자가 고치면 즉시 반영되어야 한다.
   // URL 접속 검사 결과는 넘기지 않는다 — 모달에서는 오프라인 규칙만 적용한다.
@@ -200,55 +193,39 @@ export default function OssContributeModal({
           onChange={(v) => setDraft((p) => ({ ...p, licenseCombination: nullify(v) }))}
         />
 
-        <div>
-          <TextAreaField
-            id="oss-declared-license"
-            label="Declared License"
-            value={draft.declaredLicenseList ?? ''}
-            disabled={saving}
-            help="쉼표 또는 줄바꿈으로 구분"
-            hints={hints}
-            hintField="declaredLicense"
-            onChange={(v) => setDraft((p) => ({ ...p, declaredLicenseList: nullify(v) }))}
-          />
-          {declaredMapping.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-1.5">
-              {declaredMapping.map((item, i) => (
-                <LicenseBadgeWithMapping
-                  key={i}
-                  name={item.name}
-                  id={item.id}
-                  loading={licenseMappingLoading}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        <LicenseSelectField
+          id="oss-declared-license"
+          label="Declared License"
+          selected={declaredLicenses}
+          counterpartSelected={detectedLicenses}
+          counterpartLabel="detected"
+          licenses={licenses}
+          lookupLicenseId={lookupLicenseId}
+          registryLoading={licenseMappingLoading}
+          disabled={saving}
+          hints={hints}
+          hintField="declaredLicense"
+          onChange={(next) =>
+            setDraft((p) => ({ ...p, declaredLicenseList: joinMultiValue(next) }))
+          }
+        />
 
-        <div>
-          <TextAreaField
-            id="oss-detected-license"
-            label="Detected License"
-            value={draft.detectedLicenseList ?? ''}
-            disabled={saving}
-            help="쉼표 또는 줄바꿈으로 구분"
-            hints={hints}
-            hintField="detectedLicense"
-            onChange={(v) => setDraft((p) => ({ ...p, detectedLicenseList: nullify(v) }))}
-          />
-          {detectedMapping.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-1.5">
-              {detectedMapping.map((item, i) => (
-                <LicenseBadgeWithMapping
-                  key={i}
-                  name={item.name}
-                  id={item.id}
-                  loading={licenseMappingLoading}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        <LicenseSelectField
+          id="oss-detected-license"
+          label="Detected License"
+          selected={detectedLicenses}
+          counterpartSelected={declaredLicenses}
+          counterpartLabel="declared"
+          licenses={licenses}
+          lookupLicenseId={lookupLicenseId}
+          registryLoading={licenseMappingLoading}
+          disabled={saving}
+          hints={hints}
+          hintField="detectedLicense"
+          onChange={(next) =>
+            setDraft((p) => ({ ...p, detectedLicenseList: joinMultiValue(next) }))
+          }
+        />
 
         {!licenseMappingLoading && unmappedLicenses.length > 0 && (
           <p className="text-xs text-amber-600">
